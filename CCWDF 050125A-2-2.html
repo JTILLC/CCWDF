@@ -1,0 +1,1242 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCW Diagnostic Form</title>
+    <link href="tailwind.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .section { margin-bottom: 1.5rem; padding: 1rem; background-color: #f3f4f6; border-radius: 0.5rem; }
+        .grid-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
+        .input-group { display: flex; align-items: center; margin-bottom: 0.5rem; }
+        .label { width: 12rem; font-weight: 600; }
+        .heads-container { display: flex; flex-wrap: wrap; gap: 1rem; }
+        .head-item { display: flex; flex-direction: column; align-items: center; width: 6rem; }
+        .test-head-item { display: flex; flex-direction: column; align-items: center; width: 8rem; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #e5e7eb; padding: 0.5rem; text-align: center; }
+        th { background-color: #e5e7eb; }
+        .error-message { color: #ef4444; margin-top: 0.5rem; }
+        .notification { 
+            position: fixed; top: 10px; right: 10px; 
+            background-color: #10b981; color: white; 
+            padding: 0.5rem 1rem; border-radius: 0.25rem; 
+            display: none; z-index: 1000;
+        }
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+            appearance: textfield;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 p-6">
+    <div class="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow">
+        <h1 class="text-2xl font-bold text-center mb-6">Joshua Todd Industries - CCW Diagnostic Form</h1>
+
+        <!-- Notification -->
+        <div id="notification" class="notification"></div>
+
+        <!-- General Info -->
+        <div class="section">
+            <h2 class="text-xl font-semibold mb-4">General Information</h2>
+            <div class="grid-container">
+                <div class="input-group">
+                    <label class="label">Customer:</label>
+                    <input type="text" id="customer" class="border p-2 rounded w-full" />
+                </div>
+                <div class="input-group">
+                    <label class="label">Street Address:</label>
+                    <input type="text" id="street_address" class="border p-2 rounded w-full" />
+                </div>
+                <div class="input-group">
+                    <label class="label">City:</label>
+                    <input type="text" id="city" class="border p-2 rounded w-full" />
+                </div>
+                <div class="input-group">
+                    <label class="label">State:</label>
+                    <input type="text" id="state" class="border p-2 rounded w-full" />
+                </div>
+                <div class="input-group">
+                    <label class="label">Line Number:</label>
+                    <input type="text" id="line_number" class="border p-2 rounded w-full" />
+                </div>
+                <div class="input-group">
+                    <label class="label">Date:</label>
+                    <input type="date" id="date" class="border p-2 rounded w-full" />
+                </div>
+                <div class="input-group">
+                    <label class="label">Running?</label>
+                    <input type="checkbox" id="running" />
+                </div>
+                <div class="input-group">
+                    <label class="label">Model:</label>
+                    <input type="text" id="model" class="border p-2 rounded w-full" />
+                </div>
+                <div class="input-group">
+                    <label class="label">Serial #:</label>
+                    <input type="text" id="serial" class="border p-2 rounded w-full" />
+                </div>
+                <div class="input-group">
+                    <label class="label">Job #:</label>
+                    <input type="text" id="job" class="border p-2 rounded w-full" />
+                </div>
+            </div>
+        </div>
+
+        <!-- Heads Section -->
+        <div class="section">
+            <h2 class="text-xl font-semibold mb-4">Heads Status</h2>
+            <div class="input-group mb-4">
+                <label class="label">Number of Heads:</label>
+                <select id="num-heads" class="border p-2 rounded">
+                    <!-- Options will be populated by JavaScript -->
+                </select>
+            </div>
+            <div id="heads-container" class="heads-container"></div>
+            <div id="heads-error" class="error-message hidden"></div>
+            <div class="input-group mt-4">
+                <label class="label">Additional Notes:</label>
+                <textarea id="heads_issue" class="border p-2 rounded w-full" rows="4"></textarea>
+            </div>
+        </div>
+
+        <!-- Exterior Section -->
+        <div class="section">
+            <h2 class="text-xl font-semibold mb-4">Exterior Conditions</h2>
+            <div class="grid-container">
+                <div class="input-group">
+                    <label class="label">RCU Condition:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="rcu_condition" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="rcu_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">RF Pan Condition:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="rf_pan_condition" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="rf_pan_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">DF Pan Condition:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="df_pan_condition" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="df_pan_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">AF Pan Condition:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="af_pan_condition" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="af_pan_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">Chutes Condition:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="chutes_condition" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="chutes_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">Infeed Chute Support Arms:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="infeed_chute_support" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="infeed_chute_support_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">RF Bolts Missing:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="rf_bolts_missing" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="rf_bolts_missing_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">RF Boots Condition:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="rf_boots_condition" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="rf_boots_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">DF Boots Condition:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="df_boots_condition" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="df_boots_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">AF Boots Condition:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="af_boots_condition" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="af_boots_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Interior Section -->
+        <div class="section">
+            <h2 class="text-xl font-semibold mb-4">Interior Conditions</h2>
+            <div class="grid-container">
+                <div class="input-group">
+                    <label class="label">Feeder Cover Condition:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="feeder_cover_condition" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="feeder_cover_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">RF Feeder Condition:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="rf_feeder_condition" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="rf_feeder_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">DF Feeder Condition:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="df_feeder_condition" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="df_feeder_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">AF Feeder Condition:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="af_feeder_condition" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="af_feeder_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">WDU Condition:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="wdu_condition" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="wdu_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">BDU Condition:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="bdu_condition" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="bdu_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">Cabinet Doors Condition:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="cabinet_doors_condition" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="cabinet_doors_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">Drains Installed and Clear:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="drains_condition" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="drains_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">Air Dryer Functional:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="air_dryer_condition" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="air_dryer_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Misc Items Section -->
+        <div class="section">
+            <h2 class="text-xl font-semibold mb-4">Miscellaneous Items</h2>
+            <div class="grid-container">
+                <div class="input-group">
+                    <label class="label">TH/DTH/RS Condition:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="th_dth_rs_condition" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="th_dth_rs_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">DF Test Drive:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="df_test_drive" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="df_test_drive_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">AF Test Drive:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="af_test_drive" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="af_test_drive_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">TH Test Drive:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="th_test_drive" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="th_test_drive_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">DTH Test Drive:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="dth_test_drive" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="dth_test_drive_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="label">RS Test Drive:</label>
+                    <div class="flex w-full gap-2">
+                        <select id="rs_test_drive" class="border p-2 rounded flex-1">
+                            <option value="">Select</option>
+                            <option value="Good">Good</option>
+                            <option value="Bad">Bad</option>
+                            <option value="N/A">N/A</option>
+                        </select>
+                        <input type="text" id="rs_test_drive_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Drive and Span Weight -->
+        <div class="section">
+            <h2 class="text-xl font-semibold mb-4">Test Drive and Span Weight</Ah2>
+            <div class="input-group mb-4">
+                <label class="label">Span Weight:</label>
+                <select id="span_weight" class="border p-2 rounded">
+                    <option value="">Select</option>
+                    <option value="200g">200g</option>
+                    <option value="400g">400g</option>
+                    <option value="1000g">1000g</option>
+                    <option value="2000g">2000g</option>
+                </select>
+            </div>
+            <div id="test-heads-container" class="heads-container"></div>
+            <div id="test-heads-error" class="error-message hidden"></div>
+            <div class="input-group mt-4">
+                <label class="label">Total Differential:</label>
+                <input type="text" id="total_differential" class="border p-2 rounded w-full bg-gray-100" readonly />
+            </div>
+            <div class="input-group mt-4">
+                <label class="label">Notes:</label>
+                <textarea id="notes" class="border p-2 rounded w-full" rows="4"></textarea>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="text-center mt-6 flex justify-center gap-4 flex-wrap">
+            <button id="generate-pdf" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Generate PDF</button>
+            <button id="export-csv" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">Export to CSV</button>
+            <label class="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 cursor-pointer">
+                Import CSV
+                <input type="file" id="import-csv" accept=".csv" class="hidden" />
+            </label>
+            <button id="export-json" class="bg-teal-500 text-white px-4 py-2 rounded hover:bg-teal-600">Export JSON Backup</button>
+            <label class="bg-indigo-500 text-white px-4 py-2 rounded hover:bg-indigo-600 cursor-pointer">
+                Import JSON Backup
+                <input type="file" id="import-json" accept=".json" class="hidden" />
+            </label>
+            <button id="clear-data" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Clear Saved Data</button>
+            <button id="reset-form" class="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600">Reset Form</button>
+            <div id="pdf-error" class="error-message hidden w-full"></div>
+            <div id="csv-error" class="error-message hidden w-full"></div>
+            <div id="json-error" class="error-message hidden w-full"></div>
+        </div>
+
+        <!-- JavaScript for Form Persistence, Dynamic Heads, PDF Generation, CSV, and JSON Handling -->
+        <script>
+            var gk_isXlsx = false;
+            var gk_xlsxFileLookup = {};
+            var gk_fileData = {};
+            function filledCell(cell) {
+                return cell !== '' && cell != null;
+            }
+            function loadFileData(filename) {
+                if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+                    try {
+                        var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                        var firstSheetName = workbook.SheetNames[0];
+                        var worksheet = workbook.Sheets[firstSheetName];
+                        var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                        var filteredData = jsonData.filter(row => row.some(filledCell));
+                        var headerRowIndex = filteredData.findIndex((row, index) =>
+                            row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                        );
+                        if (headerRowIndex === -1 || headerRowIndex > 25) {
+                            headerRowIndex = 0;
+                        }
+                        var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
+                        csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                        return csv;
+                    } catch (e) {
+                        console.error(e);
+                        return "";
+                    }
+                }
+                return gk_fileData[filename] || "";
+            }
+
+            // Utility function to generate timestamp
+            function getTimestamp() {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                const hours = String(now.getHours()).padStart(2, '0');
+                const minutes = String(now.getMinutes()).padStart(2, '0');
+                const seconds = String(now.getSeconds()).padStart(2, '0');
+                return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+            }
+
+            // Show error message
+            function showError(elementId, message) {
+                const errorElement = document.getElementById(elementId);
+                errorElement.textContent = message;
+                errorElement.classList.remove('hidden');
+            }
+
+            // Hide error message
+            function hideError(elementId) {
+                const errorElement = document.getElementById(elementId);
+                errorElement.textContent = '';
+                errorElement.classList.add('hidden');
+            }
+
+            // Show notification
+            function showNotification(message) {
+                const notification = document.getElementById('notification');
+                notification.textContent = message;
+                notification.style.display = 'block';
+                setTimeout(() => {
+                    notification.style.display = 'none';
+                }, 2000);
+            }
+
+            // Debounce function
+            function debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+
+            // Populate number of heads dropdown
+            try {
+                const numHeadsSelect = document.getElementById('num-heads');
+                for (let i = 1; i <= 32; i++) {
+                    const option = document.createElement('option');
+                    option.value = i;
+                    option.textContent = i;
+                    numHeadsSelect.appendChild(option);
+                }
+                numHeadsSelect.value = 32; // Default to 32 heads
+            } catch (error) {
+                console.error('Error populating num-heads dropdown:', error);
+                showError('heads-error', 'Failed to initialize head selection.');
+            }
+
+            // Function to render heads in Head Status section
+            function renderHeads(numHeads) {
+                try {
+                    const headsContainer = document.getElementById('heads-container');
+                    if (!headsContainer) {
+                        throw new Error('Heads container not found');
+                    }
+                    headsContainer.innerHTML = '';
+                    for (let i = 1; i <= numHeads; i++) {
+                        const headDiv = document.createElement('div');
+                        headDiv.className = 'head-item';
+                        headDiv.innerHTML = `
+                            <span class="font-semibold">Head ${i}</span>
+                            <input type="checkbox" id="head${i}" title="Check if head is Down" />
+                            <select id="head${i}_issue" class="border p-1 rounded w-full mt-1 text-sm">
+                                <option value="None">None</option>
+                                <option value="Operator">Operator</option>
+                                <option value="Detached Head">Detached Head</option>
+                                <option value="Stepper Motor Error">Stepper Motor Error</option>
+                                <option value="Installed Wrong">Installed Wrong</option>
+                                <option value="Hopper Issues">Hopper Issues</option>
+                                <option value="Chute">Chute</option>
+                                <option value="Load Cell">Load Cell</option>
+                            </select>
+                        `;
+                        headsContainer.appendChild(headDiv);
+                    }
+                    document.querySelectorAll('#heads-container input, #heads-container select').forEach(input => {
+                        input.addEventListener('change', debouncedSaveFormState);
+                    });
+                    hideError('heads-error');
+                    renderTestHeads(numHeads);
+                } catch (error) {
+                    console.error('Error rendering heads:', error);
+                    showError('heads-error', 'Failed to render heads.');
+                }
+            }
+
+            // Function to render test heads in Test Drive and Span Weight section
+            function renderTestHeads(numHeads) {
+                try {
+                    const testHeadsContainer = document.getElementById('test-heads-container');
+                    if (!testHeadsContainer) {
+                        throw new Error('Test heads container not found');
+                    }
+                    testHeadsContainer.innerHTML = '';
+                    for (let i = 1; i <= numHeads; i++) {
+                        const headDiv = document.createElement('div');
+                        headDiv.className = 'test-head-item';
+                        headDiv.innerHTML = `
+                            <span class="font-semibold">Head ${i}</span>
+                            <label class="text-sm">Current Weight</label>
+                            <input type="number" id="head${i}_current_weight" class="border p-1 rounded w-full text-sm" step="any" />
+                            <label class="text-sm mt-1">After Span Adjust</label>
+                            <input type="number" id="head${i}_after_span" class="border p-1 rounded w-full text-sm" step="any" />
+                            <label class="text-sm mt-1">Differential</label>
+                            <input type="text" id="head${i}_differential" class="border p-1 rounded w-full text-sm bg-gray-100" readonly />
+                        `;
+                        testHeadsContainer.appendChild(headDiv);
+                    }
+                    document.querySelectorAll('#test-heads-container input[type="number"]').forEach(input => {
+                        input.addEventListener('input', updateDifferential);
+                    });
+                    document.querySelectorAll('#test-heads-container input:not([readonly])').forEach(input => {
+                        input.addEventListener('change', debouncedSaveFormState);
+                    });
+                    updateTotalDifferential();
+                    hideError('test-heads-error');
+                } catch (error) {
+                    console.error('Error rendering test heads:', error);
+                    showError('test-heads-error', 'Failed to render test heads.');
+                }
+            }
+
+            // Function to update differential and total differential
+            function updateDifferential(event) {
+                try {
+                    const input = event.target;
+                    const headNumber = input.id.match(/\d+/)[0];
+                    const currentWeightInput = document.getElementById(`head${headNumber}_current_weight`);
+                    const afterSpanInput = document.getElementById(`head${headNumber}_after_span`);
+                    const differentialInput = document.getElementById(`head${headNumber}_differential`);
+                    const currentWeight = parseFloat(currentWeightInput.value) || 0;
+                    const afterSpan = parseFloat(afterSpanInput.value) || 0;
+                    const differential = afterSpan - currentWeight;
+                    differentialInput.value = isNaN(differential) ? '' : differential.toFixed(2);
+                    updateTotalDifferential();
+                } catch (error) {
+                    console.error('Error updating differential:', error);
+                }
+            }
+
+            // Function to update total differential
+            function updateTotalDifferential() {
+                try {
+                    const numHeads = parseInt(document.getElementById('num-heads').value) || 32;
+                    let total = 0;
+                    for (let i = 1; i <= numHeads; i++) {
+                        const differentialInput = document.getElementById(`head${i}_differential`);
+                        if (differentialInput && differentialInput.value) {
+                            total += parseFloat(differentialInput.value) || 0;
+                        }
+                    }
+                    const totalDifferentialInput = document.getElementById('total_differential');
+                    totalDifferentialInput.value = isNaN(total) ? '' : total.toFixed(2);
+                } catch (error) {
+                    console.error('Error updating total differential:', error);
+                }
+            }
+
+            // Event listener for number of heads change
+            try {
+                const numHeadsSelect = document.getElementById('num-heads');
+                numHeadsSelect.addEventListener('change', () => {
+                    const numHeads = parseInt(numHeadsSelect.value);
+                    if (isNaN(numHeads) || numHeads < 1 || numHeads > 32) {
+                        showError('heads-error', 'Invalid number of heads selected.');
+                        return;
+                    }
+                    renderHeads(numHeads);
+                    debouncedSaveFormState();
+                });
+            } catch (error) {
+                console.error('Error setting up num-heads listener:', error);
+                showError('heads-error', 'Failed to set up head selection.');
+            }
+
+            // Save form state to localStorage
+            function saveFormState() {
+                try {
+                    const inputs = document.querySelectorAll('input:not([readonly]), select, textarea');
+                    const formData = {};
+                    inputs.forEach(input => {
+                        if (input.type === 'checkbox') {
+                            formData[input.id] = input.checked;
+                        } else {
+                            formData[input.id] = input.value;
+                        }
+                    });
+                    localStorage.setItem('ccwDiagnosticForm', JSON.stringify(formData));
+                    showNotification('Data saved');
+                    hasUnsavedChanges = false;
+                } catch (error) {
+                    console.error('Error saving form state:', error);
+                    showError('json-error', 'Failed to save form state.');
+                }
+            }
+
+            // Debounced save form state
+            const debouncedSaveFormState = debounce(saveFormState, 500);
+
+            // Load form state from localStorage
+            function loadFormState() {
+                try {
+                    const formData = JSON.parse(localStorage.getItem('ccwDiagnosticForm') || '{}');
+                    const numHeads = formData['num-heads'] ? parseInt(formData['num-heads']) : 32;
+                    document.getElementById('num-heads').value = numHeads;
+                    renderHeads(numHeads);
+                    for (const [id, value] of Object.entries(formData)) {
+                        const input = document.getElementById(id);
+                        if (input) {
+                            if (input.type === 'checkbox') {
+                                input.checked = value;
+                            } else {
+                                input.value = value;
+                            }
+                        }
+                    }
+                    for (let i = 1; i <= numHeads; i++) {
+                        const currentWeightInput = document.getElementById(`head${i}_current_weight`);
+                        const afterSpanInput = document.getElementById(`head${i}_after_span`);
+                        const differentialInput = document.getElementById(`head${i}_differential`);
+                        if (currentWeightInput && afterSpanInput && differentialInput) {
+                            const currentWeight = parseFloat(currentWeightInput.value) || 0;
+                            const afterSpan = parseFloat(afterSpanInput.value) || 0;
+                            const differential = afterSpan - currentWeight;
+                            differentialInput.value = isNaN(differential) ? '' : differential.toFixed(2);
+                        }
+                    }
+                    updateTotalDifferential();
+                    showNotification('Data loaded');
+                } catch (error) {
+                    console.error('Error loading form state:', error);
+                    showError('heads-error', 'Failed to load saved form state.');
+                }
+            }
+
+            // Reset form to default state
+            function resetForm() {
+                if (confirm('Are you sure you want to reset the form to its default state? All current field values will be cleared.')) {
+                    try {
+                        const numHeads = 32;
+                        document.getElementById('num-heads').value = numHeads;
+                        renderHeads(numHeads);
+                        document.querySelectorAll('input:not([readonly]), select, textarea').forEach(input => {
+                            if (input.type === 'checkbox') {
+                                input.checked = false;
+                            } else if (input.tagName === 'SELECT') {
+                                input.value = input.options[0].value;
+                            } else if (input.id !== 'num-heads') {
+                                input.value = '';
+                            }
+                        });
+                        updateTotalDifferential();
+                        showNotification('Form reset to default');
+                        debouncedSaveFormState(); // Save the reset state
+                    } catch (error) {
+                        console.error('Error resetting form:', error);
+                        showError('json-error', 'Failed to reset form.');
+                    }
+                }
+            }
+
+            // Track unsaved changes
+            let hasUnsavedChanges = false;
+            function markUnsavedChanges() {
+                hasUnsavedChanges = true;
+            }
+
+            // Export JSON backup
+            function exportJSON() {
+                try {
+                    const formData = JSON.parse(localStorage.getItem('ccwDiagnosticForm') || '{}');
+                    const blob = new Blob([JSON.stringify(formData, null, 2)], { type: 'application/json' });
+                    const link = document.createElement('a');
+                    const url = URL.createObjectURL(blob);
+                    link.setAttribute('href', url);
+                    link.setAttribute('download', `ccw_diagnostic_form_${getTimestamp()}.json`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                    hideError('json-error');
+                } catch (error) {
+                    console.error('Error exporting JSON:', error);
+                    showError('json-error', 'Failed to export JSON. Please try again.');
+                }
+            }
+
+            // Import JSON backup
+            function importJSON(event) {
+                try {
+                    const file = event.target.files[0];
+                    if (!file) {
+                        showError('json-error', 'No file selected.');
+                        return;
+                    }
+                    if (!file.name.endsWith('.json')) {
+                        showError('json-error', 'Please select a valid JSON file.');
+                        return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        try {
+                            const formData = JSON.parse(e.target.result);
+                            if (!formData['num-heads']) {
+                                throw new Error('Invalid JSON: Number of heads not specified.');
+                            }
+                            const numHeads = parseInt(formData['num-heads']);
+                            if (isNaN(numHeads) || numHeads < 1 || numHeads > 32) {
+                                throw new Error('Invalid number of heads in JSON.');
+                            }
+                            localStorage.setItem('ccwDiagnosticForm', JSON.stringify(formData));
+                            loadFormState();
+                            hideError('json-error');
+                            event.target.value = '';
+                            showNotification('JSON imported successfully');
+                        } catch (error) {
+                            console.error('Error importing JSON:', error);
+                            showError('json-error', `Failed to import JSON: ${error.message}`);
+                        }
+                    };
+                    reader.onerror = function() {
+                        showError('json-error', 'Error reading JSON file.');
+                    };
+                    reader.readAsText(file);
+                } catch (error) {
+                    console.error('Error importing JSON:', error);
+                    showError('json-error', 'Failed to import JSON. Please try again.');
+                }
+            }
+
+            // Clear saved data
+            function clearSavedData() {
+                if (confirm('Are you sure you want to clear all saved data? This cannot be undone.')) {
+                    try {
+                        localStorage.removeItem('ccwDiagnosticForm');
+                        document.getElementById('num-heads').value = 32;
+                        renderHeads(32);
+                        document.querySelectorAll('input:not([readonly]), select, textarea').forEach(input => {
+                            if (input.type === 'checkbox') {
+                                input.checked = false;
+                            } else if (input.tagName === 'SELECT') {
+                                input.value = input.options[0].value;
+                            } else if (input.id !== 'num-heads') {
+                                input.value = '';
+                            }
+                        });
+                        updateTotalDifferential();
+                        showNotification('Saved data cleared');
+                    } catch (error) {
+                        console.error('Error clearing data:', error);
+                        showError('json-error', 'Failed to clear saved data.');
+                    }
+                }
+            }
+
+            // Export form data to CSV
+            function exportToCSV() {
+                try {
+                    const formData = {};
+                    const numHeads = parseInt(document.getElementById('num-heads').value) || 32;
+
+                    // General Information
+                    formData.customer = document.getElementById('customer')?.value || '';
+                    formData.street_address = document.getElementById('street_address')?.value || '';
+                    formData.city = document.getElementById('city')?.value || '';
+                    formData.state = document.getElementById('state')?.value || '';
+                    formData.line_number = document.getElementById('line_number')?.value || '';
+                    formData.date = document.getElementById('date')?.value || '';
+                    formData.running = document.getElementById('running')?.checked ? 'Yes' : 'No';
+                    formData.model = document.getElementById('model')?.value || '';
+                    formData.serial = document.getElementById('serial')?.value || '';
+                    formData.job = document.getElementById('job')?.value || '';
+
+                    // Heads Status
+                    formData.num_heads = numHeads;
+                    formData.heads_issue = document.getElementById('heads_issue')?.value || '';
+                    for (let i = 1; i <= numHeads; i++) {
+                        formData[`head${i}_status`] = document.getElementById(`head${i}`)?.checked ? 'Down' : 'Up';
+                        formData[`head${i}_issue`] = document.getElementById(`head${i}_issue`)?.value || 'None';
+                    }
+
+                    // Exterior Conditions
+                    const exteriorFields = [
+                        'rcu_condition', 'rf_pan_condition', 'df_pan_condition', 'af_pan_condition',
+                        'chutes_condition', 'infeed_chute_support', 'rf_bolts_missing',
+                        'rf_boots_condition', 'df_boots_condition', 'af_boots_condition'
+                    ];
+                    exteriorFields.forEach(field => {
+                        formData[field] = document.getElementById(field)?.value || '';
+                        formData[`${field}_notes`] = document.getElementById(`${field}_notes`)?.value || '';
+                    });
+
+                    // Interior Conditions
+                    const interiorFields = [
+                        'feeder_cover_condition', 'rf_feeder_condition', 'df_feeder_condition',
+                        'af_feeder_condition', 'wdu_condition', 'bdu_condition',
+                        'cabinet_doors_condition', 'drains_condition', 'air_dryer_condition'
+                    ];
+                    interiorFields.forEach(field => {
+                        formData[field] = document.getElementById(field)?.value || '';
+                        formData[`${field}_notes`] = document.getElementById(`${field}_notes`)?.value || '';
+                    });
+
+                    // Miscellaneous Items
+                    const miscFields = [
+                        'th_dth_rs_condition', 'df_test_drive', 'af_test_drive',
+                        'th_test_drive', 'dth_test_drive', 'rs_test_drive'
+                    ];
+                    miscFields.forEach(field => {
+                        formData[field] = document.getElementById(field)?.value || '';
+                        formData[`${field}_notes`] = document.getElementById(`${field}_notes`)?.value || '';
+                    });
+
+                    // Test Drive and Span Weight
+                    formData.span_weight = document.getElementById('span_weight')?.value || '';
+                    formData.total_differential = document.getElementById('total_differential')?.value || '';
+                    formData.notes = document.getElementById('notes')?.value || '';
+                    for (let i = 1; i <= numHeads; i++) {
+                        formData[`head${i}_current_weight`] = document.getElementById(`head${i}_current_weight`)?.value || '';
+                        formData[`head${i}_after_span`] = document.getElementById(`head${i}_after_span`)?.value || '';
+                        formData[`head${i}_differential`] = document.getElementById(`head${i}_differential`)?.value || '';
+                    }
+
+                    // Create CSV headers and data
+                    const headers = Object.keys(formData);
+                    const data = [headers, headers.map(key => formData[key])];
+
+                    // Convert to CSV using SheetJS
+                    const ws = XLSX.utils.aoa_to_sheet(data);
+                    const csv = XLSX.utils.sheet_to_csv(ws);
+
+                    // Download CSV
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement('a');
+                    const url = URL.createObjectURL(blob);
+                    link.setAttribute('href', url);
+                    link.setAttribute('download', `ccw_diagnostic_form_${getTimestamp()}.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+
+                    hideError('csv-error');
+                } catch (error) {
+                    console.error('Error exporting CSV:', error);
+                    showError('csv-error', 'Failed to export CSV. Please try again.');
+                }
+            }
+
+            // Import CSV file
+            function importFromCSV(event) {
+                try {
+                    const file = event.target.files[0];
+                    if (!file) {
+                        showError('csv-error', 'No file selected.');
+                        return;
+                    }
+                    if (!file.name.endsWith('.csv')) {
+                        showError('csv-error', 'Please select a valid CSV file.');
+                        return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        try {
+                            const text = e.target.result;
+                            const lines = text.split('\n').filter(line => line.trim() !== '');
+                            if (lines.length < 2) {
+                                throw new Error('CSV file is empty or invalid.');
+                            }
+                            const headers = lines[0].split(',').map(h => h.trim());
+                            const values = lines[1].split(',').map(v => v.trim());
+                            if (headers.length !== values.length) {
+                                throw new Error('CSV headers and values do not match.');
+                            }
+                            const formData = {};
+                            headers.forEach((header, index) => {
+                                formData[header] = values[index] || '';
+                            });
+                            if (!formData['num_heads']) {
+                                throw new Error('Number of heads not specified in CSV.');
+                            }
+                            const numHeads = parseInt(formData['num_heads']);
+                            if (isNaN(numHeads) || numHeads < 1 || numHeads > 32) {
+                                throw new Error('Invalid number of heads in CSV.');
+                            }
+                            document.getElementById('num-heads').value = numHeads;
+                            renderHeads(numHeads);
+                            for (const [key, value] of Object.entries(formData)) {
+                                const input = document.getElementById(key);
+                                if (input) {
+                                    if (input.type === 'checkbox') {
+                                        input.checked = value === 'Down' || value === 'true' || value === 'Yes';
+                                    } else if (input.type === 'number') {
+                                        input.value = isNaN(parseFloat(value)) ? '' : parseFloat(value);
+                                    } else {
+                                        input.value = value;
+                                    }
+                                }
+                            }
+                            for (let i = 1; i <= numHeads; i++) {
+                                const currentWeightInput = document.getElementById(`head${i}_current_weight`);
+                                const afterSpanInput = document.getElementById(`head${i}_after_span`);
+                                const differentialInput = document.getElementById(`head${i}_differential`);
+                                if (currentWeightInput && afterSpanInput && differentialInput) {
+                                    const currentWeight = parseFloat(currentWeightInput.value) || 0;
+                                    const afterSpan = parseFloat(afterSpanInput.value) || 0;
+                                    const differential = afterSpan - currentWeight;
+                                    differentialInput.value = isNaN(differential) ? '' : differential.toFixed(2);
+                                }
+                            }
+                            updateTotalDifferential();
+                            saveFormState();
+                            hideError('csv-error');
+                            event.target.value = '';
+                            showNotification('CSV imported successfully');
+                        } catch (error) {
+                            console.error('Error processing CSV:', error);
+                            showError('csv-error', `Failed to import CSV: ${error.message}`);
+                        }
+                    };
+                    reader.onerror = function() {
+                        showError('csv-error', 'Error reading CSV file.');
+                    };
+                    reader.readAsText(file);
+                } catch (error) {
+                    console.error('Error importing CSV:', error);
+                    showError('csv-error', 'Failed to import CSV. Please try again.');
+                }
+            }
+
+            // PDF Generation
+            try {
+                document.getElementById('generate-pdf').addEventListener('click', () => {
+                    if (!window.jspdf || !window.jspdf.jsPDF) {
+                        showError('pdf-error', 'PDF library not loaded. Please try again.');
+                        return;
+                    }
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF();
+                    let y = 10;
+                    function addSection(title, content) {
+                        doc.setFontSize(14);
+                        doc.text(title, 10, y);
+                        y += 10;
+                        doc.setFontSize(10);
+                        content.forEach(line => {
+                            if (y > 270) {
+                                doc.addPage();
+                                y = 10;
+                            }
+                            const splitText = doc.splitTextToSize(line, 180);
+                            doc.text(splitText, 10, y);
+                            y += splitText.length * 7;
+                        });
+                        y += 5;
+                    }
+                    addSection('General Information', [
+                        `Customer: ${document.getElementById('customer')?.value || 'N/A'}`,
+                        `Street Address: ${document.getElementById('street_address')?.value || 'N/A'}`,
+                        `City: ${document.getElementById('city')?.value || 'N/A'}`,
+                        `State: ${document.getElementById('state')?.value || 'N/A'}`,
+                        `Line Number: ${document.getElementById('line_number')?.value || 'N/A'}`,
+                        `Date: ${document.getElementById('date')?.value || 'N/A'}`,
+                        `Running: ${document.getElementById('running')?.checked ? 'Yes' : 'No'}`,
+                        `Model: ${document.getElementById('model')?.value || 'N/A'}`,
+                        `Serial #: ${document.getElementById('serial')?.value || 'N/A'}`,
+                        `Job #: ${document.getElementById('job')?.value || 'N/A'}`
+                    ]);
+                    const numHeads = parseInt(document.getElementById('num-heads')?.value || 32);
+                    const headsStatus = [];
+                    for (let i = 1; i <= numHeads; i++) {
+                        const status = document.getElementById(`head${i}`)?.checked ? 'Down' : 'Up';
+                        const issue = document.getElementById(`head${i}_issue`)?.value || 'None';
+                        headsStatus.push(`Head ${i}: ${status}, Issue: ${issue}`);
+                    }
+                    headsStatus.push(`Additional Notes: ${document.getElementById('heads_issue')?.value || 'N/A'}`);
+                    addSection('Heads Status', headsStatus);
+                    const exterior = [
+                        `RCU Condition: ${document.getElementById('rcu_condition')?.value || 'N/A'}, Notes: ${document.getElementById('rcu_condition_notes')?.value || 'N/A'}`,
+                        `RF Pan Condition: ${document.getElementById('rf_pan_condition')?.value || 'N/A'}, Notes: ${document.getElementById('rf_pan_condition_notes')?.value || 'N/A'}`,
+                        `DF Pan Condition: ${document.getElementById('df_pan_condition')?.value || 'N/A'}, Notes: ${document.getElementById('df_pan_condition_notes')?.value || 'N/A'}`,
+                        `AF Pan Condition: ${document.getElementById('af_pan_condition')?.value || 'N/A'}, Notes: ${document.getElementById('af_pan_condition_notes')?.value || 'N/A'}`,
+                        `Chutes Condition: ${document.getElementById('chutes_condition')?.value || 'N/A'}, Notes: ${document.getElementById('chutes_condition_notes')?.value || 'N/A'}`,
+                        `Infeed Chute Support Arms: ${document.getElementById('infeed_chute_support')?.value || 'N/A'}, Notes: ${document.getElementById('infeed_chute_support_notes')?.value || 'N/A'}`,
+                        `RF Bolts Missing: ${document.getElementById('rf_bolts_missing')?.value || 'N/A'}, Notes: ${document.getElementById('rf_bolts_missing_notes')?.value || 'N/A'}`,
+                        `RF Boots Condition: ${document.getElementById('rf_boots_condition')?.value || 'N/A'}, Notes: ${document.getElementById('rf_boots_condition_notes')?.value || 'N/A'}`,
+                        `DF Boots Condition: ${document.getElementById('df_boots_condition')?.value || 'N/A'}, Notes: ${document.getElementById('df_boots_condition_notes')?.value || 'N/A'}`,
+                        `AF Boots Condition: ${document.getElementById('af_boots_condition')?.value || 'N/A'}, Notes: ${document.getElementById('af_boots_condition_notes')?.value || 'N/A'}`
+                    ];
+                    addSection('Exterior Conditions', exterior);
+                    const interior = [
+                        `Feeder Cover Condition: ${document.getElementById('feeder_cover_condition')?.value || 'N/A'}, Notes: ${document.getElementById('feeder_cover_condition_notes')?.value || 'N/A'}`,
+                        `RF Feeder Condition: ${document.getElementById('rf_feeder_condition')?.value || 'N/A'}, Notes: ${document.getElementById('rf_feeder_condition_notes')?.value || 'N/A'}`,
+                        `DF Feeder Condition: ${document.getElementById('df_feeder_condition')?.value || 'N/A'}, Notes: ${document.getElementById('df_feeder_condition_notes')?.value || 'N/A'}`,
+                        `AF Feeder Condition: ${document.getElementById('af_feeder_condition')?.value || 'N/A'}, Notes: ${document.getElementById('af_feeder_condition_notes')?.value || 'N/A'}`,
+                        `WDU Condition: ${document.getElementById('wdu_condition')?.value || 'N/A'}, Notes: ${document.getElementById('wdu_condition_notes')?.value || 'N/A'}`,
+                        `BDU Condition: ${document.getElementById('bdu_condition')?.value || 'N/A'}, Notes: ${document.getElementById('bdu_condition_notes')?.value || 'N/A'}`,
+                        `Cabinet Doors Condition: ${document.getElementById('cabinet_doors_condition')?.value || 'N/A'}, Notes: ${document.getElementById('cabinet_doors_condition_notes')?.value || 'N/A'}`,
+                        `Drains Installed and Clear: ${document.getElementById('drains_condition')?.value || 'N/A'}, Notes: ${document.getElementById('drains_condition_notes')?.value || 'N/A'}`,
+                        `Air Dryer Functional: ${document.getElementById('air_dryer_condition')?.value || 'N/A'}, Notes: ${document.getElementById('air_dryer_condition_notes')?.value || 'N/A'}`
+                    ];
+                    addSection('Interior Conditions', interior);
+                    const misc = [
+                        `TH/DTH/RS Condition: ${document.getElementById('th_dth_rs_condition')?.value || 'N/A'}, Notes: ${document.getElementById('th_dth_rs_condition_notes')?.value || 'N/A'}`,
+                        `DF Test Drive: ${document.getElementById('df_test_drive')?.value || 'N/A'}, Notes: ${document.getElementById('df_test_drive_notes')?.value || 'N/A'}`,
+                        `AF Test Drive: ${document.getElementById('af_test_drive')?.value || 'N/A'}, Notes: ${document.getElementById('af_test_drive_notes')?.value || 'N/A'}`,
+                        `TH Test Drive: ${document.getElementById('th_test_drive')?.value || 'N/A'}, Notes: ${document.getElementById('th_test_drive_notes')?.value || 'N/A'}`,
+                        `DTH Test Drive: ${document.getElementById('dth_test_drive')?.value || 'N/A'}, Notes: ${document.getElementById('dth_test_drive_notes')?.value || 'N/A'}`,
+                        `RS Test Drive: ${document.getElementById('rs_test_drive')?.value || 'N/A'}, Notes: ${document.getElementById('rs_test_drive_notes')?.value || 'N/A'}`
+                    ];
+                    addSection('Miscellaneous Items', misc);
+                    const testDrive = [`Span Weight: ${document.getElementById('span_weight')?.value || 'N/A'}`];
+                    for (let i = 1; i <= numHeads; i++) {
+                        const currentWeight = document.getElementById(`head${i}_current_weight`)?.value || 'N/A';
+                        const afterSpan = document.getElementById(`head${i}_after_span`)?.value || 'N/A';
+                        const differential = document.getElementById(`head${i}_differential`)?.value || 'N/A';
+                        testDrive.push(`Head ${i}: Current Weight: ${currentWeight}, After Span Adjust: ${afterSpan}, Differential: ${differential}`);
+                    }
+                    testDrive.push(`Total Differential: ${document.getElementById('total_differential')?.value || 'N/A'}`);
+                    testDrive.push(`Notes: ${document.getElementById('notes')?.value || 'N/A'}`);
+                    addSection('Test Drive and Span Weight', testDrive);
+                    doc.save(`ccw_diagnostic_form_${getTimestamp()}.pdf`);
+                    hideError('pdf-error');
+                });
+            } catch (error) {
+                console.error('Error generating PDF:', error);
+                showError('pdf-error', 'Failed to generate PDF. Please try again.');
+            }
+
+            // Event listeners
+            try {
+                // CSV export and import
+                document.getElementById('export-csv').addEventListener('click', exportToCSV);
+                document.getElementById('import-csv').addEventListener('change', importFromCSV);
+
+                // JSON export and import
+                document.getElementById('export-json').addEventListener('click', exportJSON);
+                document.getElementById('import-json').addEventListener('change', importJSON);
+
+                // Clear data and reset form
+                document.getElementById('clear-data').addEventListener('click', clearSavedData);
+                document.getElementById('reset-form').addEventListener('click', resetForm);
+
+                // Mark unsaved changes on input
+                document.querySelectorAll('input:not([readonly]), select, textarea').forEach(input => {
+                    input.addEventListener('change', markUnsavedChanges);
+                    input.addEventListener('input', markUnsavedChanges);
+                });
+
+                // Prompt before leaving page
+                window.addEventListener('beforeunload', (event) => {
+                    if (hasUnsavedChanges) {
+                        event.preventDefault();
+                        event.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+                    }
+                });
+            } catch (error) {
+                console.error('Error setting up event listeners:', error);
+                showError('json-error', 'Failed to initialize form functionality.');
+            }
+
+            // Initial render
+            try {
+                window.addEventListener('load', () => {
+                    loadFormState();
+                    // Attach debounced save to existing inputs
+                    document.querySelectorAll('input:not([readonly]), select, textarea').forEach(input => {
+                        input.addEventListener('change', debouncedSaveFormState);
+                    });
+                });
+            } catch (error) {
+                console.error('Error setting up load event:', error);
+                showError('heads-error', 'Failed to initialize form.');
+            }
+        </script>
+    </div>
+</body>
+</html>
