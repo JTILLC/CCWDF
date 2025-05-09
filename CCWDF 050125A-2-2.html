@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -54,7 +15,7 @@
         .label { width: 12rem; font-weight: 600; }
         .heads-container { display: flex; flex-wrap: wrap; gap: 1rem; }
         .head-item { display: flex; flex-direction: column; align-items: center; width: 6rem; }
-        .test-head-item { display: flex; flex-direction: column; align-items: center; width: 8rem; }
+        .test-head-item { display: flex; flex-direction: column; align-items: center; width: 6rem; }
         table { width: 100%; border-collapse: collapse; }
         th, td { border: 1px solid #e5e7eb; padding: 0.5rem; text-align: center; }
         th { background-color: #e5e7eb; }
@@ -470,7 +431,7 @@
 
         <!-- Test Drive and Span Weight -->
         <div class="section">
-            <h2 class="text-xl font-semibold mb-4">Test Drive and Span Weight</Ah2>
+            <h2 class="text-xl font-semibold mb-4">Test Drive and Span Weight</h2>
             <div class="input-group mb-4">
                 <label class="label">Span Weight:</label>
                 <select id="span_weight" class="border p-2 rounded">
@@ -661,12 +622,12 @@
                         headDiv.className = 'test-head-item';
                         headDiv.innerHTML = `
                             <span class="font-semibold">Head ${i}</span>
-                            <label class="text-sm">Current Weight</label>
-                            <input type="number" id="head${i}_current_weight" class="border p-1 rounded w-full text-sm" step="any" />
-                            <label class="text-sm mt-1">After Span Adjust</label>
-                            <input type="number" id="head${i}_after_span" class="border p-1 rounded w-full text-sm" step="any" />
-                            <label class="text-sm mt-1">Differential</label>
-                            <input type="text" id="head${i}_differential" class="border p-1 rounded w-full text-sm bg-gray-100" readonly />
+                            <label>Current Weight</label>
+                            <input type="number" id="head${i}_current_weight" class="border p-2 rounded w-full" step="any" />
+                            <label class="mt-1">After Span Adjust</label>
+                            <input type="number" id="head${i}_after_span" class="border p-2 rounded w-full" step="any" />
+                            <label class="mt-1">Differential</label>
+                            <input type="text" id="head${i}_differential" class="border p-2 rounded w-full bg-gray-100" readonly />
                         `;
                         testHeadsContainer.appendChild(headDiv);
                     }
