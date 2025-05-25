@@ -1,1203 +1,1121 @@
-<!DOCTYPE html>
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        
+function exportDashboardToPDF() {
+  try {
+    const dashboard = document.getElementById('dashboard');
+    if (!dashboard || dashboard.style.display === 'none') {
+      alert('Please open the Dashboard before exporting.');
+      return;
+    }
+
+    const clone = dashboard.cloneNode(true);
+    const win = window.open('', '_blank');
+    if (!win) throw new Error('Failed to open new window');
+
+    const html = '<html><head><title>Ishida Dashboard Report</title>' +
+      '<style>' +
+      'body { font-family: Arial, sans-serif; padding: 20px; }' +
+      'table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }' +
+      'th, td { padding: 10px; border: 1px solid #ccc; text-align: center; }' +
+      'h3, h4 { text-align: center; }' +
+      '</style></head><body>' +
+      '<h1>Ishida Dashboard Report</h1>' +
+      clone.innerHTML +
+      '</body></html>';
+
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+    win.close();
+  } catch (error) {
+    console.error('Error in exportDashboardToPDF:', error);
+    alert('Error exporting dashboard: ' + error.message);
+  }
+}
+
+</script><!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CCW Diagnostic Form</title>
-    <link href="tailwind.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <style>
-        body { font-family: Arial, sans-serif; }
-        .section { margin-bottom: 1.5rem; padding: 1rem; background-color: #f3f4f6; border-radius: 0.5rem; }
-        .grid-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
-        .input-group { display: flex; align-items: center; margin-bottom: 0.5rem; }
-        .label { width: 12rem; font-weight: 600; }
-        .heads-container { display: flex; flex-wrap: wrap; gap: 1rem; }
-        .head-item { display: flex; flex-direction: column; align-items: center; width: 6rem; }
-        .test-head-item { display: flex; flex-direction: column; align-items: center; width: 6rem; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #e5e7eb; padding: 0.5rem; text-align: center; }
-        th { background-color: #e5e7eb; }
-        .error-message { color: #ef4444; margin-top: 0.5rem; }
-        .notification { 
-            position: fixed; top: 10px; right: 10px; 
-            background-color: #10b981; color: white; 
-            padding: 0.5rem 1rem; border-radius: 0.25rem; 
-            display: none; z-index: 1000;
-        }
-        input[type="number"]::-webkit-inner-spin-button,
-        input[type="number"]::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-        input[type="number"] {
-            -moz-appearance: textfield;
-            appearance: textfield;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ishida Weigher Issue Logger</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #ccc;
+      text-align: center;
+    }
+    select, input[type="text"], input[type="number"] {
+      width: 90%;
+    }
+    h1, h3 {
+      text-align: center;
+    }
+    .machine-section, .dashboard {
+      display: none;
+      border: 2px solid #aaa;
+      padding: 10px;
+      margin-top: 20px;
+      background-color: #fff;
+    }
+    .nav-buttons {
+      margin-top: 20px;
+      margin-bottom: 20px;
+    }
+    .nav-buttons button {
+      margin-right: 10px;
+    }
+    .machine-running {
+      margin-bottom: 10px;
+      font-weight: bold;
+    }
+    .notes-container {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .save-indicator {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background-color: #4caf50;
+      color: white;
+      padding: 5px 10px;
+      border-radius: 3px;
+      display: none;
+    }
+    .global-fields {
+      margin-bottom: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .global-fields label {
+      margin-right: 5px;
+    }
+    .line-fields {
+      margin-bottom: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .line-fields label {
+      margin-right: 5px;
+    }
+    .dashboard table {
+      margin-top: 10px;
+    }
+    .dashboard h3 {
+      margin-top: 20px;
+    }
+    @media (max-width: 600px) {
+      table, thead, tbody, th, td, tr {
+        display: block;
+      }
+      th {
+        display: none;
+      }
+      td {
+        display: flex;
+        justify-content: space-between;
+        padding: 5px;
+      }
+      td::before {
+        content: attr(data-label);
+        font-weight: bold;
+        width: 50%;
+      }
+      select, input[type="text"], input[type="number"] {
+        width: 100%;
+      }
+      .global-fields, .line-fields {
+        flex-direction: column;
+      }
+    }
+  </style>
 </head>
-<body class="bg-gray-50 p-6">
-    <div class="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow">
-        <h1 class="text-2xl font-bold text-center mb-6">Joshua Todd Industries - CCW Diagnostic Form</h1>
+<body>
+  <h1>Ishida Weigher (CCW) Issue Logger</h1>
+  <div class="global-fields">
+    <label for="customer">Customer:</label>
+    <input type="text" id="customer" oninput="debounceSave()">
+    <label for="address">Address:</label>
+    <input type="text" id="address" oninput="debounceSave()">
+    <label for="cityState">City/State:</label>
+    <input type="text" id="cityState" oninput="debounceSave()">
+  </div>
+  <label for="headCount">Number of Heads:</label>
+  <select id="headCount" onchange="debounceSave()">
+    <option value="10">10</option>
+    <option value="14">14</option>
+    <option value="16">16</option>
+    <option value="18">18</option>
+    <option value="20">20</option>
+    <option value="24">24</option>
+    <option value="28">28</option>
+    <option value="32">32</option>
+  </select>
+  <button onclick="addLine()" aria-label="Add a new line">Add Line</button>
+  <button onclick="exportToCSV()">Export Current Line to CSV</button>
+  <button onclick="exportToJSON()">Export All to JSON</button>
+  <button onclick="exportToPDF()">Export to PDF</button>
+<button onclick="exportDashboardToPDF()">Export Dashboard to PDF</button>
+  <input type="file" id="importFile" accept=".csv,.json" onchange="handleImport(event)">
+  <button onclick="clearLocalStorage()" aria-label="Clear local storage">Clear Local Storage</button>
+  <button onclick="showDashboard()" aria-label="Show dashboard">Show Dashboard</button>
+  <div class="save-indicator" id="saveIndicator">Data Saved</div>
+  <div class="nav-buttons" id="machineNav"></div>
+  <div id="machineContainer"></div>
+  <div id="dashboard" class="dashboard"></div>
+  <script>
+    // Global error handler for uncaught exceptions
+    window.onerror = function(message, source, lineno, colno, error) {
+      console.error(`Uncaught error: ${message} at ${source}:${lineno}:${colno}`, error);
+      alert(`Unexpected error: ${message}. Please check the console for details.`);
+    };
 
-        <!-- Notification -->
-        <div id="notification" class="notification"></div>
+    // Debounce utility for saveToLocalStorage
+    let saveTimeout = null;
+    function debounceSave() {
+      try {
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => {
+          saveToLocalStorage();
+          showSaveIndicator();
+        }, 300);
+      } catch (error) {
+        console.error('Error in debounceSave:', error);
+      }
+    }
 
-        <!-- General Info -->
-        <div class="section">
-            <h2 class="text-xl font-semibold mb-4">General Information</h2>
-            <div class="grid-container">
-                <div class="input-group">
-                    <label class="label">Customer:</label>
-                    <input type="text" id="customer" class="border p-2 rounded w-full" />
-                </div>
-                <div class="input-group">
-                    <label class="label">Street Address:</label>
-                    <input type="text" id="street_address" class="border p-2 rounded w-full" />
-                </div>
-                <div class="input-group">
-                    <label class="label">City:</label>
-                    <input type="text" id="city" class="border p-2 rounded w-full" />
-                </div>
-                <div class="input-group">
-                    <label class="label">State:</label>
-                    <input type="text" id="state" class="border p-2 rounded w-full" />
-                </div>
-                <div class="input-group">
-                    <label class="label">Line Number:</label>
-                    <input type="text" id="line_number" class="border p-2 rounded w-full" />
-                </div>
-                <div class="input-group">
-                    <label class="label">Date:</label>
-                    <input type="date" id="date" class="border p-2 rounded w-full" />
-                </div>
-                <div class="input-group">
-                    <label class="label">Running?</label>
-                    <input type="checkbox" id="running" />
-                </div>
-                <div class="input-group">
-                    <label class="label">Model:</label>
-                    <input type="text" id="model" class="border p-2 rounded w-full" />
-                </div>
-                <div class="input-group">
-                    <label class="label">Serial #:</label>
-                    <input type="text" id="serial" class="border p-2 rounded w-full" />
-                </div>
-                <div class="input-group">
-                    <label class="label">Job #:</label>
-                    <input type="text" id="job" class="border p-2 rounded w-full" />
-                </div>
-            </div>
-        </div>
+    function showSaveIndicator() {
+      try {
+        const indicator = document.getElementById('saveIndicator');
+        if (indicator) {
+          indicator.style.display = 'block';
+          setTimeout(() => {
+            indicator.style.display = 'none';
+          }, 1000);
+        }
+      } catch (error) {
+        console.error('Error in showSaveIndicator:', error);
+      }
+    }
 
-        <!-- Heads Section -->
-        <div class="section">
-            <h2 class="text-xl font-semibold mb-4">Heads Status</h2>
-            <div class="input-group mb-4">
-                <label class="label">Number of Heads:</label>
-                <select id="num-heads" class="border p-2 rounded">
-                    <!-- Options will be populated by JavaScript -->
-                </select>
-            </div>
-            <div id="heads-container" class="heads-container"></div>
-            <div id="heads-error" class="error-message hidden"></div>
-            <div class="input-group mt-4">
-                <label class="label">Additional Notes:</label>
-                <textarea id="heads_issue" class="border p-2 rounded w-full" rows="4"></textarea>
-            </div>
-        </div>
+    function addLine() {
+      try {
+        const headCountSelect = document.getElementById("headCount");
+        const count = parseInt(headCountSelect?.value);
+        if (isNaN(count) || ![10, 14, 16, 18, 20, 24, 28, 32].includes(count)) {
+          throw new Error('Invalid head count');
+        }
+        const container = document.getElementById("machineContainer");
+        const nav = document.getElementById("machineNav");
+        if (!container || !nav) throw new Error('Missing container or nav elements');
+        const machineId = `machine_${document.querySelectorAll('.machine-section').length + 1}`;
 
-        <!-- Exterior Section -->
-        <div class="section">
-            <h2 class="text-xl font-semibold mb-4">Exterior Conditions</h2>
-            <div class="grid-container">
-                <div class="input-group">
-                    <label class="label">RCU Condition:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="rcu_condition" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="rcu_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">RF Pan Condition:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="rf_pan_condition" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="rf_pan_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">DF Pan Condition:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="df_pan_condition" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="df_pan_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">AF Pan Condition:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="af_pan_condition" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="af_pan_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">Chutes Condition:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="chutes_condition" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="chutes_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">Infeed Chute Support Arms:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="infeed_chute_support" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="infeed_chute_support_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">RF Bolts Missing:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="rf_bolts_missing" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="rf_bolts_missing_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">RF Boots Condition:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="rf_boots_condition" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="rf_boots_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">DF Boots Condition:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="df_boots_condition" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="df_boots_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">AF Boots Condition:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="af_boots_condition" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="af_boots_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-            </div>
-        </div>
+        const navButton = document.createElement("button");
+        navButton.textContent = `Line ${document.querySelectorAll('.machine-section').length + 1}`;
+        navButton.id = `nav_${machineId}`;
+        navButton.onclick = () => showLine(machineId);
+        navButton.setAttribute('aria-label', `Show ${navButton.textContent}`);
 
-        <!-- Interior Section -->
-        <div class="section">
-            <h2 class="text-xl font-semibold mb-4">Interior Conditions</h2>
-            <div class="grid-container">
-                <div class="input-group">
-                    <label class="label">Feeder Cover Condition:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="feeder_cover_condition" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="feeder_cover_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">RF Feeder Condition:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="rf_feeder_condition" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="rf_feeder_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">DF Feeder Condition:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="df_feeder_condition" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="df_feeder_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">AF Feeder Condition:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="af_feeder_condition" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="af_feeder_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">WDU Condition:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="wdu_condition" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="wdu_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">BDU Condition:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="bdu_condition" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="bdu_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">Cabinet Doors Condition:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="cabinet_doors_condition" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="cabinet_doors_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">Drains Installed and Clear:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="drains_condition" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="drains_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">Air Dryer Functional:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="air_dryer_condition" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="air_dryer_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Misc Items Section -->
-        <div class="section">
-            <h2 class="text-xl font-semibold mb-4">Miscellaneous Items</h2>
-            <div class="grid-container">
-                <div class="input-group">
-                    <label class="label">TH/DTH/RS Condition:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="th_dth_rs_condition" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="th_dth_rs_condition_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">DF Test Drive:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="df_test_drive" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="df_test_drive_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">AF Test Drive:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="af_test_drive" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="af_test_drive_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">TH Test Drive:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="th_test_drive" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="th_test_drive_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">DTH Test Drive:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="dth_test_drive" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="dth_test_drive_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label class="label">RS Test Drive:</label>
-                    <div class="flex w-full gap-2">
-                        <select id="rs_test_drive" class="border p-2 rounded flex-1">
-                            <option value="">Select</option>
-                            <option value="Good">Good</option>
-                            <option value="Bad">Bad</option>
-                            <option value="N/A">N/A</option>
-                        </select>
-                        <input type="text" id="rs_test_drive_notes" class="border p-2 rounded flex-1" placeholder="Notes" />
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Test Drive and Span Weight -->
-        <div class="section">
-            <h2 class="text-xl font-semibold mb-4">Test Drive and Span Weight</h2>
-            <div class="input-group mb-4">
-                <label class="label">Span Weight:</label>
-                <select id="span_weight" class="border p-2 rounded">
-                    <option value="">Select</option>
-                    <option value="200g">200g</option>
-                    <option value="400g">400g</option>
-                    <option value="1000g">1000g</option>
-                    <option value="2000g">2000g</option>
-                </select>
-            </div>
-            <div id="test-heads-container" class="heads-container"></div>
-            <div id="test-heads-error" class="error-message hidden"></div>
-            <div class="input-group mt-4">
-                <label class="label">Total Differential:</label>
-                <input type="text" id="total_differential" class="border p-2 rounded w-full bg-gray-100" readonly />
-            </div>
-            <div class="input-group mt-4">
-                <label class="label">Notes:</label>
-                <textarea id="notes" class="border p-2 rounded w-full" rows="4"></textarea>
-            </div>
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="text-center mt-6 flex justify-center gap-4 flex-wrap">
-            <button id="generate-pdf" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Generate PDF</button>
-            <button id="export-csv" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">Export to CSV</button>
-            <label class="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 cursor-pointer">
-                Import CSV
-                <input type="file" id="import-csv" accept=".csv" class="hidden" />
-            </label>
-            <button id="export-json" class="bg-teal-500 text-white px-4 py-2 rounded hover:bg-teal-600">Export JSON Backup</button>
-            <label class="bg-indigo-500 text-white px-4 py-2 rounded hover:bg-indigo-600 cursor-pointer">
-                Import JSON Backup
-                <input type="file" id="import-json" accept=".json" class="hidden" />
-            </label>
-            <button id="clear-data" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Clear Saved Data</button>
-            <button id="reset-form" class="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600">Reset Form</button>
-            <div id="pdf-error" class="error-message hidden w-full"></div>
-            <div id="csv-error" class="error-message hidden w-full"></div>
-            <div id="json-error" class="error-message hidden w-full"></div>
-        </div>
-
-        <!-- JavaScript for Form Persistence, Dynamic Heads, PDF Generation, CSV, and JSON Handling -->
-        <script>
-            var gk_isXlsx = false;
-            var gk_xlsxFileLookup = {};
-            var gk_fileData = {};
-            function filledCell(cell) {
-                return cell !== '' && cell != null;
+        const removeButton = document.createElement("button");
+        removeButton.textContent = "✖";
+        removeButton.style.marginLeft = "5px";
+        removeButton.setAttribute('aria-label', `Remove ${navButton.textContent}`);
+        removeButton.onclick = function(event) {
+          try {
+            event.stopPropagation();
+            console.debug(`Attempting to remove line: ${machineId}`);
+            if (confirm(`Are you sure you want to remove ${navButton.textContent}?`)) {
+              const section = document.getElementById(machineId);
+              if (section) section.remove();
+              navButton.remove();
+              removeButton.remove();
+              debounceSave();
+              console.debug(`Line ${machineId} removed successfully`);
+              updateDashboard();
             }
-            function loadFileData(filename) {
-                if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-                    try {
-                        var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                        var firstSheetName = workbook.SheetNames[0];
-                        var worksheet = workbook.Sheets[firstSheetName];
-                        var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                        var filteredData = jsonData.filter(row => row.some(filledCell));
-                        var headerRowIndex = filteredData.findIndex((row, index) =>
-                            row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                        );
-                        if (headerRowIndex === -1 || headerRowIndex > 25) {
-                            headerRowIndex = 0;
-                        }
-                        var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
-                        csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                        return csv;
-                    } catch (e) {
-                        console.error(e);
-                        return "";
-                    }
-                }
-                return gk_fileData[filename] || "";
-            }
+          } catch (error) {
+            console.error(`Error removing line ${machineId}:`, error);
+            alert(`Error removing line: ${error.message}`);
+          }
+        };
 
-            // Utility function to generate timestamp
-            function getTimestamp() {
-                const now = new Date();
-                const year = now.getFullYear();
-                const month = String(now.getMonth() + 1).padStart(2, '0');
-                const day = String(now.getDate()).padStart(2, '0');
-                const hours = String(now.getHours()).padStart(2, '0');
-                const minutes = String(now.getMinutes()).padStart(2, '0');
-                const seconds = String(now.getSeconds()).padStart(2, '0');
-                return `${year}${month}${day}_${hours}${minutes}${seconds}`;
-            }
+        nav.appendChild(navButton);
+        nav.appendChild(removeButton);
 
-            // Show error message
-            function showError(elementId, message) {
-                const errorElement = document.getElementById(elementId);
-                errorElement.textContent = message;
-                errorElement.classList.remove('hidden');
-            }
+        const machineSection = document.createElement("div");
+        machineSection.className = "machine-section";
+        machineSection.id = machineId;
 
-            // Hide error message
-            function hideError(elementId) {
-                const errorElement = document.getElementById(elementId);
-                errorElement.textContent = '';
-                errorElement.classList.add('hidden');
-            }
+        let rows = '';
+        for (let i = 0; i < count; i++) {
+          const index = i + 1;
+          rows += `
+            <tr>
+              <td data-label="Head #">${index}</td>
+              <td data-label="Status"><select name="status_${machineId}_${index}" onchange="updateRowColors(); debounceSave(); updateDashboard()">
+                <option value="active">Active</option>
+                <option value="offline">Offline</option>
+              </select></td>
+              <td data-label="Error"><select name="error_${machineId}_${index}" onchange="debounceSave(); updateDashboard()">
+                <option value="None">None</option>
+                <option value="Chute">Chute</option>
+                <option value="Operator">Operator</option>
+                <option value="Load Cell">Load Cell</option>
+                <option value="Detached Head">Detached Head</option>
+                <option value="Stepper Motor Error">Stepper Motor Error</option>
+                <option value="Hopper Issues">Hopper Issues</option>
+                <option value="Installed Wrong">Installed Wrong</option>
+                <option value="Other">Other</option>
+              </select></td>
+              <td data-label="Notes"><input type="text" name="custom_${machineId}_${index}" oninput="debounceSave(); updateDashboard()"></td>
+              <td data-label="Fixed"><select name="fixed_${machineId}_${index}" onchange="updateRowColors(); debounceSave(); updateDashboard()">
+                <option value="na">N/A</option>
+                <option value="not_fixed">Not Fixed</option>
+                <option value="fixed">Fixed</option>
+              </select></td>
+            </tr>`;
+        }
 
-            // Show notification
-            function showNotification(message) {
-                const notification = document.getElementById('notification');
-                notification.textContent = message;
-                notification.style.display = 'block';
-                setTimeout(() => {
-                    notification.style.display = 'none';
-                }, 2000);
-            }
+        machineSection.innerHTML = `
+          <h2 contenteditable="true" oninput="updateLineName('${machineId}', this.textContent); debounceSave(); updateDashboard()">${navButton.textContent}</h2>
+          <div class="line-fields">
+            <label for="model_${machineId}">Model:</label>
+            <input type="text" id="model_${machineId}" oninput="debounceSave()">
+            <label for="jobNumber_${machineId}">Job Number:</label>
+            <input type="text" id="jobNumber_${machineId}" oninput="debounceSave()">
+            <label for="serialNumber_${machineId}">Serial Number:</label>
+            <input type="text" id="serialNumber_${machineId}" oninput="debounceSave()">
+          </div>
+          <form id="issueForm_${machineId}">
+            <div class="machine-running">
+              <label><input type="checkbox" name="running_${machineId}" onchange="debounceSave()"> Line Running?</label>
+            </div>
+            <table>
+              <thead>
+                <tr><th>Head #</th><th>Status</th><th>Error</th><th>Notes</th><th>Fixed</th></tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+            <label><input type="checkbox" id="spanAdjust_${machineId}" onchange="toggleSpanAdjust(this, '${machineId}', ${count}); debounceSave()"> Span Adjust</label>
+            <div id="spanAdjustTable_${machineId}" style="display: none; margin-top: 10px;"></div>
+            <div class="notes-container">
+              <label for="notes_${machineId}"><strong>Notes:</strong></label>
+              <textarea id="notes_${machineId}" name="notes_${machineId}" rows="4" style="width: 100%;" oninput="debounceSave()"></textarea>
+              <button type="button" onclick="addTimestamp('${machineId}')" aria-label="Add timestamp to notes">Add Timestamp</button>
+            </div>
+          </form>`;
 
-            // Debounce function
-            function debounce(func, wait) {
-                let timeout;
-                return function executedFunction(...args) {
-                    const later = () => {
-                        clearTimeout(timeout);
-                        func(...args);
-                    };
-                    clearTimeout(timeout);
-                    timeout = setTimeout(later, wait);
+        container.appendChild(machineSection);
+        showLine(machineId);
+        updateRowColors();
+        debounceSave();
+        updateDashboard();
+      } catch (error) {
+        console.error('Error in addLine:', error);
+        alert(`Error adding line: ${error.message}`);
+      }
+    }
+
+    function showLine(id) {
+      try {
+        document.querySelectorAll('.machine-section, .dashboard').forEach(s => s.style.display = 'none');
+        const section = document.getElementById(id);
+        if (!section) throw new Error(`Section ${id} not found`);
+        section.style.display = 'block';
+      } catch (error) {
+        console.error('Error in showLine:', error);
+      }
+    }
+
+    function showDashboard() {
+      try {
+        console.debug('Showing dashboard');
+        document.querySelectorAll('.machine-section, .dashboard').forEach(s => s.style.display = 'none');
+        const dashboard = document.getElementById('dashboard');
+        if (!dashboard) throw new Error('Dashboard element not found');
+        updateDashboard();
+        dashboard.style.display = 'block';
+      } catch (error) {
+        console.error('Error in showDashboard:', error);
+        alert(`Error showing dashboard: ${error.message}`);
+      }
+    }
+
+    function updateDashboard() {
+      try {
+        console.debug('Updating dashboard');
+        const dashboard = document.getElementById('dashboard');
+        if (!dashboard) throw new Error('Dashboard element not found');
+        const sections = document.querySelectorAll('.machine-section');
+        let html = '<h3>Dashboard: Offline Heads</h3>';
+        let hasOfflineHeads = false;
+
+        if (sections.length === 0) {
+          html += '<p>No lines added yet.</p>';
+        } else {
+          sections.forEach(section => {
+            const title = section.querySelector('h2')?.textContent.trim() || 'Untitled';
+            const mainTable = section.querySelector('form table tbody');
+            if (!mainTable) {
+              console.warn('Main table not found for section:', section);
+              return;
+            }
+            let lineHtml = '';
+            Array.from(mainTable.querySelectorAll('tr')).forEach(row => {
+              const headNum = row.querySelector('td:first-child')?.textContent || '';
+              const statusSelect = row.querySelector('select[name^="status_"]');
+              const errorSelect = row.querySelector('select[name^="error_"]');
+              const fixedSelect = row.querySelector('select[name^="fixed_"]');
+              const notesInput = row.querySelector('input[name^="custom_"]');
+              const status = statusSelect?.value || 'active';
+              if (status !== 'offline') return;
+              const reason = errorSelect?.value || 'None';
+              const fixed = fixedSelect?.value || 'na';
+              const notes = notesInput?.value || '';
+              const rowStyle = fixed === 'fixed' ? 'background-color: orange;' : 'background-color: lightcoral;';
+              lineHtml += `
+                <tr style="${rowStyle}">
+                  <td data-label="Head #">${headNum}</td>
+                  <td data-label="Status">Offline</td>
+                  <td data-label="Reason">${reason.replace(/</g, '<')}</td>
+                  <td data-label="Fixed">${fixed === 'fixed' ? 'Fixed' : fixed === 'not_fixed' ? 'Not Fixed' : 'N/A'}</td>
+                  <td data-label="Notes">${notes.replace(/</g, '<')}</td>
+                </tr>`;
+              hasOfflineHeads = true;
+            });
+            if (lineHtml) {
+              html += `<h4>${title}</h4>`;
+              html += '<table><thead><tr><th>Head #</th><th>Status</th><th>Reason</th><th>Fixed</th><th>Notes</th></tr></thead><tbody>';
+              html += lineHtml;
+              html += '</tbody></table>';
+            }
+          });
+        }
+
+        if (!hasOfflineHeads && sections.length > 0) {
+          html += '<p>No offline heads.</p>';
+        }
+        dashboard.innerHTML = html;
+        console.debug('Dashboard updated successfully');
+      } catch (error) {
+        console.error('Error in updateDashboard:', error);
+        alert(`Error updating dashboard: ${error.message}`);
+      }
+    }
+
+    function updateLineName(machineId, newName) {
+      try {
+        const navButton = document.getElementById(`nav_${machineId}`);
+        if (!navButton) throw new Error(`Nav button for ${machineId} not found`);
+        navButton.textContent = newName;
+        navButton.setAttribute('aria-label', `Show ${newName}`);
+        updateDashboard();
+      } catch (error) {
+        console.error('Error in updateLineName:', error);
+      }
+    }
+
+    function toggleCustomError(selectEl) {
+      // No-op, kept for future extensibility
+    }
+
+    function updateRowColors() {
+      try {
+        document.querySelectorAll(".machine-section tbody tr").forEach(row => {
+          const statusSelect = row.querySelector("select[name^='status']");
+          const fixedSelect = row.querySelector("select[name^='fixed']");
+          const status = statusSelect?.value;
+          const fixed = fixedSelect?.value;
+          row.style.backgroundColor = "";
+          if (fixed === "fixed") row.style.backgroundColor = "orange";
+          else if (status === "active") row.style.backgroundColor = "lightgreen";
+          else if (status === "offline") row.style.backgroundColor = "lightcoral";
+        });
+      } catch (error) {
+        console.error('Error in updateRowColors:', error);
+      }
+    }
+
+    function toggleSpanAdjust(checkbox, machineId, count) {
+      try {
+        console.debug(`Toggling span adjust for ${machineId}, checked: ${checkbox.checked}`);
+        const container = document.getElementById(`spanAdjustTable_${machineId}`);
+        if (!container) throw new Error(`Span adjust container not found for ${machineId}`);
+        if (checkbox.checked) {
+          container.innerHTML = '';
+          let html = '<table><thead><tr><th>Head #</th><th>Current Weight</th><th>Span Weight</th><th>Difference</th></tr></thead><tbody>';
+          for (let i = 1; i <= count; i++) {
+            html += `<tr>
+              <td>${i}</td>
+              <td><input type='number' step='any' oninput='updateDifference(this, "${machineId}", ${i}); debounceSave()' id='cur_${machineId}_${i}'></td>
+              <td><input type='number' step='any' oninput='updateDifference(this, "${machineId}", ${i}); debounceSave()' id='span_${machineId}_${i}'></td>
+              <td><span id='diff_${machineId}_${i}'></span></td>
+            </tr>`;
+          }
+          html += '</tbody></table>';
+          container.innerHTML = html;
+          container.style.display = 'block';
+        } else {
+          console.debug(`Prompting to clear span adjust for ${machineId}`);
+          const confirmClear = confirm("Are you sure you want to hide and clear Span Adjust data?");
+          if (confirmClear) {
+            container.innerHTML = '';
+            container.style.display = 'none';
+            checkbox.checked = false;
+            console.debug(`Span adjust cleared for ${machineId}`);
+          } else {
+            checkbox.checked = true;
+            console.debug(`Span adjust clear canceled for ${machineId}`);
+          }
+        }
+        debounceSave();
+      } catch (error) {
+        console.error('Error in toggleSpanAdjust:', error);
+        alert(`Error toggling span adjust: ${error.message}`);
+      }
+    }
+
+    function updateDifference(input, machineId, index) {
+      try {
+        const curInput = document.getElementById(`cur_${machineId}_${index}`);
+        const spanInput = document.getElementById(`span_${machineId}_${index}`);
+        const diffSpan = document.getElementById(`diff_${machineId}_${index}`);
+        if (!curInput || !spanInput || !diffSpan) throw new Error(`Missing elements for difference update: ${machineId}_${index}`);
+        const curVal = parseFloat(curInput.value) || 0;
+        const spanVal = parseFloat(spanInput.value) || 0;
+        const diff = spanVal - curVal;
+        diffSpan.textContent = diff.toFixed(2);
+      } catch (error) {
+        console.error('Error in updateDifference:', error);
+      }
+    }
+
+    function addTimestamp(machineId) {
+      try {
+        console.debug(`Adding timestamp for machineId: ${machineId}`);
+        const textarea = document.getElementById(`notes_${machineId}`);
+        if (!textarea) throw new Error(`Notes textarea not found for ${machineId}`);
+        const now = new Date().toLocaleString('en-US', { timeZone: 'America/Denver' });
+        const timestamp = `[${now}] `;
+        const currentValue = textarea.value || '';
+        const cursorPos = textarea.selectionStart ?? currentValue.length;
+        console.debug(`Cursor position: ${cursorPos}, Current value length: ${currentValue.length}`);
+        const textBefore = currentValue.substring(0, cursorPos);
+        const textAfter = currentValue.substring(cursorPos);
+        textarea.value = textBefore + timestamp + textAfter;
+        const newCursorPos = cursorPos + timestamp.length;
+        textarea.selectionStart = textarea.selectionEnd = newCursorPos;
+        textarea.focus();
+        debounceSave();
+      } catch (error) {
+        console.error('Error in addTimestamp:', error);
+        alert(`Error adding timestamp: ${error.message}`);
+      }
+    }
+
+    function clearLocalStorage() {
+      try {
+        console.debug('Attempting to clear localStorage');
+        if (confirm('Are you sure you want to clear all saved data? This will reset the application.')) {
+          localStorage.removeItem('ishidaLogger');
+          console.debug('localStorage cleared');
+          setTimeout(() => {
+            location.reload();
+            console.debug('Page reloaded after clearing localStorage');
+          }, 0);
+        }
+      } catch (error) {
+        console.error('Error in clearLocalStorage:', error);
+        alert(`Error clearing local storage: ${error.message}`);
+      }
+    }
+
+    function saveToLocalStorage() {
+      try {
+        console.debug('Saving to localStorage');
+        const customer = document.getElementById('customer')?.value || '';
+        const address = document.getElementById('address')?.value || '';
+        const cityState = document.getElementById('cityState')?.value || '';
+        const headCount = document.getElementById('headCount')?.value || '14';
+        const lines = Array.from(document.querySelectorAll('.machine-section')).map(section => {
+          const title = section.querySelector('h2')?.textContent.trim() || '';
+          const model = section.querySelector(`#model_${section.id}`)?.value || '';
+          const jobNumber = section.querySelector(`#jobNumber_${section.id}`)?.value || '';
+          const serialNumber = section.querySelector(`#serialNumber_${section.id}`)?.value || '';
+          const running = section.querySelector('input[name^="running_"]')?.checked || false;
+          const notes = section.querySelector('textarea')?.value || '';
+          const spanAdjustSection = section.querySelector(`[id^="spanAdjustTable_"]`);
+          const spanAdjustData = spanAdjustSection && spanAdjustSection.style.display !== 'none'
+            ? Array.from(spanAdjustSection.querySelectorAll('tbody tr')).map(row => {
+                const headNum = parseInt(row.querySelector('td:first-child')?.textContent) || 0;
+                const inputs = row.querySelectorAll('input');
+                const current = inputs[0] ? parseFloat(inputs[0].value) || 0 : 0;
+                const span = inputs[1] ? parseFloat(inputs[1].value) || 0 : 0;
+                return {
+                  head: headNum,
+                  current: current,
+                  span: span,
+                  diff: (span - current).toFixed(2)
                 };
+              })
+            : [];
+          const mainTable = section.querySelector('form table tbody');
+          if (!mainTable) {
+            console.warn('Main table not found for section:', section);
+            return null;
+          }
+          const rows = Array.from(mainTable.querySelectorAll('tr')).map(row => {
+            const cells = row.querySelectorAll('select, input[type="text"]');
+            if (cells.length < 4) {
+              console.warn('Invalid row structure:', row);
+              return null;
             }
+            const headNum = row.querySelector('td:first-child')?.textContent || '';
+            const spanAdjust = spanAdjustData.find(sa => sa.head === parseInt(headNum)) || {};
+            return {
+              status: cells[0].value || 'active',
+              error: cells[1].value || 'None',
+              customError: cells[2].value || '',
+              fixed: cells[3].value || 'na',
+              currentWeight: spanAdjust.current !== undefined ? spanAdjust.current : 0,
+              spanWeight: spanAdjust.span !== undefined ? spanAdjust.span : 0,
+              weightDifference: spanAdjust.diff !== undefined ? parseFloat(spanAdjust.diff) : 0
+            };
+          }).filter(row => row);
+          return { title, model, jobNumber, serialNumber, running, notes, rows };
+        }).filter(line => line);
 
-            // Populate number of heads dropdown
-            try {
-                const numHeadsSelect = document.getElementById('num-heads');
-                for (let i = 1; i <= 32; i++) {
-                    const option = document.createElement('option');
-                    option.value = i;
-                    option.textContent = i;
-                    numHeadsSelect.appendChild(option);
+        const data = { customer, address, cityState, headCount, lines };
+        try {
+          localStorage.setItem('ishidaLogger', JSON.stringify(data));
+          console.debug('localStorage saved successfully');
+        } catch (storageError) {
+          if (storageError.name === 'QuotaExceededError') {
+            console.warn('Local storage quota exceeded. Clearing old data.');
+            localStorage.removeItem('ishidaLogger');
+            localStorage.setItem('ishidaLogger', JSON.stringify({ ...data, lines: data.lines.slice(-10) }));
+            alert('Storage limit reached. Older data was cleared to save new changes. Consider exporting to JSON as a backup.');
+          } else {
+            throw storageError;
+          }
+        }
+      } catch (error) {
+        console.error('Error in saveToLocalStorage:', error);
+        alert(`Error saving data: ${error.message}. Please export to JSON to avoid data loss.`);
+      }
+    }
+
+    function loadFromLocalStorage() {
+      try {
+        console.debug('Loading from localStorage');
+        const data = localStorage.getItem('ishidaLogger');
+        if (!data) {
+          console.debug('No localStorage data found');
+          return;
+        }
+        const parsed = JSON.parse(data);
+        if (!parsed || typeof parsed !== 'object') {
+          console.warn('Invalid localStorage data format');
+          return;
+        }
+        const { customer, address, cityState, headCount, lines } = parsed;
+        if (customer) document.getElementById('customer').value = customer;
+        if (address) document.getElementById('address').value = address;
+        if (cityState) document.getElementById('cityState').value = cityState;
+        if (headCount && document.getElementById('headCount').querySelector(`option[value="${headCount}"]`)) {
+          document.getElementById('headCount').value = headCount;
+        }
+        if (!Array.isArray(lines)) {
+          console.warn('Invalid lines data format');
+          return;
+        }
+        lines.forEach(line => {
+          if (!line?.rows || !line?.title) {
+            console.warn('Skipping invalid line data:', line);
+            return;
+          }
+          const headCountInput = document.getElementById('headCount');
+          if (headCountInput) headCountInput.value = line.rows.length;
+          addLine();
+          const section = document.querySelector('.machine-section:last-of-type');
+          if (!section) {
+            console.warn('No section created for line:', line.title);
+            return;
+          }
+          const titleEl = section.querySelector('h2');
+          if (titleEl) titleEl.textContent = line.title;
+          const modelInput = section.querySelector(`#model_${section.id}`);
+          if (modelInput) modelInput.value = line.model || '';
+          const jobNumberInput = section.querySelector(`#jobNumber_${section.id}`);
+          if (jobNumberInput) jobNumberInput.value = line.jobNumber || '';
+          const serialNumberInput = section.querySelector(`#serialNumber_${section.id}`);
+          if (serialNumberInput) serialNumberInput.value = line.serialNumber || '';
+          const runningCheckbox = section.querySelector('input[name^="running_"]');
+          if (runningCheckbox) runningCheckbox.checked = line.running;
+          const notesTextarea = section.querySelector('textarea');
+          if (notesTextarea) notesTextarea.value = line.notes || '';
+          const rows = section.querySelectorAll('tbody tr');
+          line.rows.forEach((row, i) => {
+            if (rows[i]) {
+              const cells = rows[i].querySelectorAll('select, input');
+              if (cells.length >= 4) {
+                cells[0].value = row.status || 'active';
+                cells[1].value = row.error || 'None';
+                cells[2].value = row.customError || '';
+                cells[3].value = row.fixed || 'na';
+              }
+            }
+          });
+          updateRowColors();
+          if (line.rows.some(row => row.currentWeight || row.spanWeight || row.weightDifference)) {
+            const checkbox = section.querySelector('input[id^="spanAdjust_"]');
+            if (checkbox) {
+              checkbox.checked = true;
+              toggleSpanAdjust(checkbox, section.id, line.rows.length);
+              line.rows.forEach((row, i) => {
+                const head = i + 1;
+                const curInput = document.getElementById(`cur_${section.id}_${head}`);
+                const spanInput = document.getElementById(`span_${section.id}_${head}`);
+                if (curInput && spanInput) {
+                  curInput.value = row.currentWeight || '';
+                  spanInput.value = row.spanWeight || '';
+                  updateDifference(null, section.id, head);
                 }
-                numHeadsSelect.value = 32; // Default to 32 heads
-            } catch (error) {
-                console.error('Error populating num-heads dropdown:', error);
-                showError('heads-error', 'Failed to initialize head selection.');
+              });
             }
+          }
+        });
+        console.debug('localStorage loaded successfully');
+        updateDashboard();
+      } catch (error) {
+        console.error('Error in loadFromLocalStorage:', error);
+        alert(`Error loading data: ${error.message}. Please import a JSON backup if available.`);
+      }
+    }
 
-            // Function to render heads in Head Status section
-            function renderHeads(numHeads) {
-                try {
-                    const headsContainer = document.getElementById('heads-container');
-                    if (!headsContainer) {
-                        throw new Error('Heads container not found');
-                    }
-                    headsContainer.innerHTML = '';
-                    for (let i = 1; i <= numHeads; i++) {
-                        const headDiv = document.createElement('div');
-                        headDiv.className = 'head-item';
-                        headDiv.innerHTML = `
-                            <span class="font-semibold">Head ${i}</span>
-                            <input type="checkbox" id="head${i}" title="Check if head is Down" />
-                            <select id="head${i}_issue" class="border p-1 rounded w-full mt-1 text-sm">
-                                <option value="None">None</option>
-                                <option value="Operator">Operator</option>
-                                <option value="Detached Head">Detached Head</option>
-                                <option value="Stepper Motor Error">Stepper Motor Error</option>
-                                <option value="Installed Wrong">Installed Wrong</option>
-                                <option value="Hopper Issues">Hopper Issues</option>
-                                <option value="Chute">Chute</option>
-                                <option value="Load Cell">Load Cell</option>
-                            </select>
-                        `;
-                        headsContainer.appendChild(headDiv);
-                    }
-                    document.querySelectorAll('#heads-container input, #heads-container select').forEach(input => {
-                        input.addEventListener('change', debouncedSaveFormState);
-                    });
-                    hideError('heads-error');
-                    renderTestHeads(numHeads);
-                } catch (error) {
-                    console.error('Error rendering heads:', error);
-                    showError('heads-error', 'Failed to render heads.');
+    function exportToCSV() {
+      try {
+        const section = document.querySelector('.machine-section:not([style*="display: none"])');
+        if (!section) {
+          alert('No line is currently visible to export.');
+          return;
+        }
+
+        const customer = document.getElementById('customer')?.value.replace(/\n/g, ' ').replace(/"/g, '""') || '';
+        const address = document.getElementById('address')?.value.replace(/\n/g, ' ').replace(/"/g, '""') || '';
+        const cityState = document.getElementById('cityState')?.value.replace(/\n/g, ' ').replace(/"/g, '""') || '';
+        const title = section.querySelector('h2')?.textContent.trim() || 'Untitled';
+        const model = section.querySelector(`#model_${section.id}`)?.value.replace(/\n/g, ' ').replace(/"/g, '""') || '';
+        const jobNumber = section.querySelector(`#jobNumber_${section.id}`)?.value.replace(/\n/g, ' ').replace(/"/g, '""') || '';
+        const serialNumber = section.querySelector(`#serialNumber_${section.id}`)?.value.replace(/\n/g, ' ').replace(/"/g, '""') || '';
+        const running = section.querySelector('input[name^="running_"]')?.checked ? 'Yes' : 'No';
+        const notes = section.querySelector('textarea')?.value.replace(/\n/g, ' ').replace(/"/g, '""') || '';
+        const spanAdjustSection = section.querySelector(`[id^="spanAdjustTable_"]`);
+        const spanAdjustData = spanAdjustSection && spanAdjustSection.style.display !== 'none'
+          ? Array.from(spanAdjustSection.querySelectorAll('tbody tr')).map(row => {
+              const headNum = parseInt(row.querySelector('td:first-child')?.textContent) || 0;
+              const inputs = row.querySelectorAll('input');
+              const current = inputs[0] ? parseFloat(inputs[0].value) || 0 : 0;
+              const span = inputs[1] ? parseFloat(inputs[1].value) || 0 : 0;
+              return {
+                head: headNum,
+                current: current,
+                span: span,
+                diff: (span - current).toFixed(2)
+              };
+            })
+          : [];
+
+        const mainTable = section.querySelector('form table tbody');
+        if (!mainTable) throw new Error('Main table not found');
+        const headers = ['Head #', 'Status', 'Error', 'Notes', 'Fixed', 'Current Weight', 'Span Weight', 'Weight Difference']
+          .map(h => `"${h}"`).join(',');
+        const rows = Array.from(mainTable.querySelectorAll('tr')).map(row => {
+          const cells = row.querySelectorAll('select, input[type="text"]');
+          if (cells.length < 4) {
+            console.warn('Invalid row structure:', row);
+            return '';
+          }
+          const headNum = row.querySelector('td:first-child')?.textContent || '';
+          const spanAdjust = spanAdjustData.find(sa => sa.head === parseInt(headNum)) || {};
+          return [
+            headNum,
+            cells[0].value || 'active',
+            cells[1].value || 'None',
+            cells[2].value.replace(/"/g, '""') || '',
+            cells[3].value || 'na',
+            spanAdjust.current !== undefined ? spanAdjust.current : '',
+            spanAdjust.span !== undefined ? spanAdjust.span : '',
+            spanAdjust.diff !== undefined ? spanAdjust.diff : ''
+          ].map(v => `"${v}"`).join(',');
+        }).filter(row => row).join('\n');
+
+        const csvContent = [
+          `"Customer","${customer}"`,
+          `"Address","${address}"`,
+          `"City/State","${cityState}"`,
+          `"Line Title","${title}"`,
+          `"Model","${model}"`,
+          `"Job Number","${jobNumber}"`,
+          `"Serial Number","${serialNumber}"`,
+          `"Running","${running}"`,
+          `"Line Notes","${notes}"`,
+          '',
+          headers,
+          rows
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `IshidaIssueLog_${title.replace(/\s+/g, '_')}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (error) {
+        console.error('Error in exportToCSV:', error);
+        alert(`Error exporting to CSV: ${error.message}`);
+      }
+    }
+
+    function exportToJSON() {
+      try {
+        const customer = document.getElementById('customer')?.value || '';
+        const address = document.getElementById('address')?.value || '';
+        const cityState = document.getElementById('cityState')?.value || '';
+        const headCount = document.getElementById('headCount')?.value || '14';
+        const lines = Array.from(document.querySelectorAll('.machine-section')).map(section => {
+          const title = section.querySelector('h2')?.textContent.trim() || 'Untitled';
+          const model = section.querySelector(`#model_${section.id}`)?.value || '';
+          const jobNumber = section.querySelector(`#jobNumber_${section.id}`)?.value || '';
+          const serialNumber = section.querySelector(`#serialNumber_${section.id}`)?.value || '';
+          const running = section.querySelector('input[name^="running_"]')?.checked || false;
+          const notes = section.querySelector('textarea')?.value || '';
+          const spanAdjustSection = section.querySelector(`[id^="spanAdjustTable_"]`);
+          const spanAdjustData = spanAdjustSection && spanAdjustSection.style.display !== 'none'
+            ? Array.from(spanAdjustSection.querySelectorAll('tbody tr')).map(row => {
+                const headNum = parseInt(row.querySelector('td:first-child')?.textContent) || 0;
+                const inputs = row.querySelectorAll('input');
+                const current = inputs[0] ? parseFloat(inputs[0].value) || 0 : 0;
+                const span = inputs[1] ? parseFloat(inputs[1].value) || 0 : 0;
+                return {
+                  head: headNum,
+                  current: current,
+                  span: span,
+                  diff: (span - current).toFixed(2)
+                };
+              })
+            : [];
+
+          const mainTable = section.querySelector('form table tbody');
+          if (!mainTable) {
+            console.warn('Main table not found for JSON export:', title);
+            return null;
+          }
+          const rows = Array.from(mainTable.querySelectorAll('tr')).map(row => {
+            const cells = row.querySelectorAll('select, input[type="text"]');
+            if (cells.length < 4) {
+              console.warn('Invalid row structure:', row);
+              return null;
+            }
+            const headNum = row.querySelector('td:first-child')?.textContent || '';
+            const spanAdjust = spanAdjustData.find(sa => sa.head === parseInt(headNum)) || {};
+            return {
+              status: cells[0].value || 'active',
+              error: cells[1].value || 'None',
+              customError: cells[2].value || '',
+              fixed: cells[3].value || 'na',
+              currentWeight: spanAdjust.current !== undefined ? spanAdjust.current : 0,
+              spanWeight: spanAdjust.span !== undefined ? spanAdjust.span : 0,
+              weightDifference: spanAdjust.diff !== undefined ? parseFloat(spanAdjust.diff) : 0
+            };
+          }).filter(row => row);
+
+          return { title, model, jobNumber, serialNumber, running, notes, rows };
+        }).filter(line => line);
+
+        const data = { customer, address, cityState, headCount, lines };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'IshidaIssueLog.json';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (error) {
+        console.error('Error in exportToJSON:', error);
+        alert(`Error exporting to JSON: ${error.message}`);
+      }
+    }
+
+    function handleImport(event) {
+      try {
+        const file = event.target.files?.[0];
+        if (!file) {
+          console.warn('No file selected for import');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          try {
+            if (file.name.endsWith('.json')) {
+              const data = JSON.parse(e.target.result);
+              if (!data || typeof data !== 'object') throw new Error('Invalid JSON format');
+              const { customer, address, cityState, headCount, lines } = data;
+              if (customer) document.getElementById('customer').value = customer;
+              if (address) document.getElementById('address').value = address;
+              if (cityState) document.getElementById('cityState').value = cityState;
+              if (headCount && document.getElementById('headCount').querySelector(`option[value="${headCount}"]`)) {
+                document.getElementById('headCount').value = headCount;
+              }
+              if (!Array.isArray(lines)) throw new Error('Invalid lines data format');
+              lines.forEach(line => {
+                if (!line?.rows || !line?.title) {
+                  console.warn('Skipping invalid line data:', line);
+                  return;
                 }
-            }
-
-            // Function to render test heads in Test Drive and Span Weight section
-            function renderTestHeads(numHeads) {
-                try {
-                    const testHeadsContainer = document.getElementById('test-heads-container');
-                    if (!testHeadsContainer) {
-                        throw new Error('Test heads container not found');
-                    }
-                    testHeadsContainer.innerHTML = '';
-                    for (let i = 1; i <= numHeads; i++) {
-                        const headDiv = document.createElement('div');
-                        headDiv.className = 'test-head-item';
-                        headDiv.innerHTML = `
-                            <span class="font-semibold">Head ${i}</span>
-                            <label>Current Weight</label>
-                            <input type="number" id="head${i}_current_weight" class="border p-2 rounded w-full" step="any" />
-                            <label class="mt-1">After Span Adjust</label>
-                            <input type="number" id="head${i}_after_span" class="border p-2 rounded w-full" step="any" />
-                            <label class="mt-1">Differential</label>
-                            <input type="text" id="head${i}_differential" class="border p-2 rounded w-full bg-gray-100" readonly />
-                        `;
-                        testHeadsContainer.appendChild(headDiv);
-                    }
-                    document.querySelectorAll('#test-heads-container input[type="number"]').forEach(input => {
-                        input.addEventListener('input', updateDifferential);
-                    });
-                    document.querySelectorAll('#test-heads-container input:not([readonly])').forEach(input => {
-                        input.addEventListener('change', debouncedSaveFormState);
-                    });
-                    updateTotalDifferential();
-                    hideError('test-heads-error');
-                } catch (error) {
-                    console.error('Error rendering test heads:', error);
-                    showError('test-heads-error', 'Failed to render test heads.');
+                const headCountInput = document.getElementById('headCount');
+                if (headCountInput) headCountInput.value = line.rows.length;
+                addLine();
+                const section = document.querySelector('.machine-section:last-of-type');
+                if (!section) {
+                  console.warn('No section created for import:', line.title);
+                  return;
                 }
-            }
-
-            // Function to update differential and total differential
-            function updateDifferential(event) {
-                try {
-                    const input = event.target;
-                    const headNumber = input.id.match(/\d+/)[0];
-                    const currentWeightInput = document.getElementById(`head${headNumber}_current_weight`);
-                    const afterSpanInput = document.getElementById(`head${headNumber}_after_span`);
-                    const differentialInput = document.getElementById(`head${headNumber}_differential`);
-                    const currentWeight = parseFloat(currentWeightInput.value) || 0;
-                    const afterSpan = parseFloat(afterSpanInput.value) || 0;
-                    const differential = afterSpan - currentWeight;
-                    differentialInput.value = isNaN(differential) ? '' : differential.toFixed(2);
-                    updateTotalDifferential();
-                } catch (error) {
-                    console.error('Error updating differential:', error);
-                }
-            }
-
-            // Function to update total differential
-            function updateTotalDifferential() {
-                try {
-                    const numHeads = parseInt(document.getElementById('num-heads').value) || 32;
-                    let total = 0;
-                    for (let i = 1; i <= numHeads; i++) {
-                        const differentialInput = document.getElementById(`head${i}_differential`);
-                        if (differentialInput && differentialInput.value) {
-                            total += parseFloat(differentialInput.value) || 0;
-                        }
+                const titleEl = section.querySelector('h2');
+                if (titleEl) titleEl.textContent = line.title;
+                const modelInput = section.querySelector(`#model_${section.id}`);
+                if (modelInput) modelInput.value = line.model || '';
+                const jobNumberInput = section.querySelector(`#jobNumber_${section.id}`);
+                if (jobNumberInput) jobNumberInput.value = line.jobNumber || '';
+                const serialNumberInput = section.querySelector(`#serialNumber_${section.id}`);
+                if (serialNumberInput) serialNumberInput.value = line.serialNumber || '';
+                const runningCheckbox = section.querySelector('input[name^="running_"]');
+                if (runningCheckbox) runningCheckbox.checked = line.running;
+                const notesTextarea = section.querySelector('textarea');
+                if (notesTextarea) notesTextarea.value = line.notes || '';
+                const rows = section.querySelectorAll('tbody tr');
+                line.rows.forEach((row, i) => {
+                  if (rows[i]) {
+                    const cells = rows[i].querySelectorAll('select, input');
+                    if (cells.length >= 4) {
+                      cells[0].value = row.status || 'active';
+                      cells[1].value = row.error || 'None';
+                      cells[2].value = row.customError || '';
+                      cells[3].value = row.fixed || 'na';
                     }
-                    const totalDifferentialInput = document.getElementById('total_differential');
-                    totalDifferentialInput.value = isNaN(total) ? '' : total.toFixed(2);
-                } catch (error) {
-                    console.error('Error updating total differential:', error);
-                }
-            }
-
-            // Event listener for number of heads change
-            try {
-                const numHeadsSelect = document.getElementById('num-heads');
-                numHeadsSelect.addEventListener('change', () => {
-                    const numHeads = parseInt(numHeadsSelect.value);
-                    if (isNaN(numHeads) || numHeads < 1 || numHeads > 32) {
-                        showError('heads-error', 'Invalid number of heads selected.');
-                        return;
-                    }
-                    renderHeads(numHeads);
-                    debouncedSaveFormState();
+                  }
                 });
-            } catch (error) {
-                console.error('Error setting up num-heads listener:', error);
-                showError('heads-error', 'Failed to set up head selection.');
-            }
-
-            // Save form state to localStorage
-            function saveFormState() {
-                try {
-                    const inputs = document.querySelectorAll('input:not([readonly]), select, textarea');
-                    const formData = {};
-                    inputs.forEach(input => {
-                        if (input.type === 'checkbox') {
-                            formData[input.id] = input.checked;
-                        } else {
-                            formData[input.id] = input.value;
-                        }
+                updateRowColors();
+                if (line.rows.some(row => row.currentWeight || row.spanWeight || row.weightDifference)) {
+                  const checkbox = section.querySelector('input[id^="spanAdjust_"]');
+                  if (checkbox) {
+                    checkbox.checked = true;
+                    toggleSpanAdjust(checkbox, section.id, line.rows.length);
+                    line.rows.forEach((row, i) => {
+                      const head = i + 1;
+                      const curInput = document.getElementById(`cur_${section.id}_${head}`);
+                      const spanInput = document.getElementById(`span_${section.id}_${head}`);
+                      if (curInput && spanInput) {
+                        curInput.value = row.currentWeight || '';
+                        spanInput.value = row.spanWeight || '';
+                        updateDifference(null, section.id, head);
+                      }
                     });
-                    localStorage.setItem('ccwDiagnosticForm', JSON.stringify(formData));
-                    showNotification('Data saved');
-                    hasUnsavedChanges = false;
-                } catch (error) {
-                    console.error('Error saving form state:', error);
-                    showError('json-error', 'Failed to save form state.');
+                  }
                 }
+              });
+              updateDashboard();
             }
+          } catch (error) {
+            console.error('Error parsing import data:', error);
+            alert(`Error importing file: ${error.message}`);
+          }
+        };
+        reader.readAsText(file);
+      } catch (error) {
+        console.error('Error in handleImport:', error);
+        alert(`Error initiating import: ${error.message}`);
+      }
+    }
 
-            // Debounced save form state
-            const debouncedSaveFormState = debounce(saveFormState, 500);
+    function exportToPDF() {
+      try {
+        const visible = document.querySelector('.machine-section:not([style*="display: none"])');
+        if (!visible) {
+          alert('No line is currently visible to export.');
+          return;
+        }
+        const customer = document.getElementById('customer')?.value || '';
+        const address = document.getElementById('address')?.value || '';
+        const cityState = document.getElementById('cityState')?.value || '';
+        const clone = visible.cloneNode(true);
 
-            // Load form state from localStorage
-            function loadFormState() {
-                try {
-                    const formData = JSON.parse(localStorage.getItem('ccwDiagnosticForm') || '{}');
-                    const numHeads = formData['num-heads'] ? parseInt(formData['num-heads']) : 32;
-                    document.getElementById('num-heads').value = numHeads;
-                    renderHeads(numHeads);
-                    for (const [id, value] of Object.entries(formData)) {
-                        const input = document.getElementById(id);
-                        if (input) {
-                            if (input.type === 'checkbox') {
-                                input.checked = value;
-                            } else {
-                                input.value = value;
-                            }
-                        }
-                    }
-                    for (let i = 1; i <= numHeads; i++) {
-                        const currentWeightInput = document.getElementById(`head${i}_current_weight`);
-                        const afterSpanInput = document.getElementById(`head${i}_after_span`);
-                        const differentialInput = document.getElementById(`head${i}_differential`);
-                        if (currentWeightInput && afterSpanInput && differentialInput) {
-                            const currentWeight = parseFloat(currentWeightInput.value) || 0;
-                            const afterSpan = parseFloat(afterSpanInput.value) || 0;
-                            const differential = afterSpan - currentWeight;
-                            differentialInput.value = isNaN(differential) ? '' : differential.toFixed(2);
-                        }
-                    }
-                    updateTotalDifferential();
-                    showNotification('Data loaded');
-                } catch (error) {
-                    console.error('Error loading form state:', error);
-                    showError('heads-error', 'Failed to load saved form state.');
-                }
-            }
+        clone.querySelectorAll('select').forEach(select => {
+          const span = document.createElement('span');
+          span.textContent = select.options[select.selectedIndex]?.textContent || '';
+          select.replaceWith(span);
+        });
+        clone.querySelectorAll('input[type="text"], input[type="number"]').forEach(input => {
+          const span = document.createElement('span');
+          span.textContent = input.value || '';
+          input.replaceWith(span);
+        });
+        clone.querySelectorAll('textarea').forEach(textarea => {
+          const div = document.createElement('div');
+          div.textContent = textarea.value || '';
+          textarea.replaceWith(div);
+        });
+        clone.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+          const span = document.createElement('span');
+          span.textContent = checkbox.checked ? 'Yes' : 'No';
+          checkbox.replaceWith(span);
+        });
 
-            // Reset form to default state
-            function resetForm() {
-                if (confirm('Are you sure you want to reset the form to its default state? All current field values will be cleared.')) {
-                    try {
-                        const numHeads = 32;
-                        document.getElementById('num-heads').value = numHeads;
-                        renderHeads(numHeads);
-                        document.querySelectorAll('input:not([readonly]), select, textarea').forEach(input => {
-                            if (input.type === 'checkbox') {
-                                input.checked = false;
-                            } else if (input.tagName === 'SELECT') {
-                                input.value = input.options[0].value;
-                            } else if (input.id !== 'num-heads') {
-                                input.value = '';
-                            }
-                        });
-                        updateTotalDifferential();
-                        showNotification('Form reset to default');
-                        debouncedSaveFormState(); // Save the reset state
-                    } catch (error) {
-                        console.error('Error resetting form:', error);
-                        showError('json-error', 'Failed to reset form.');
-                    }
-                }
-            }
+        const spanAdjust = clone.querySelector('[id^="spanAdjustTable_"]');
+        if (spanAdjust && spanAdjust.style.display !== 'none') {
+          spanAdjust.querySelectorAll('span[id^="diff_"]').forEach(diff => {
+            diff.textContent = diff.textContent || '0.00';
+          });
+        }
 
-            // Track unsaved changes
-            let hasUnsavedChanges = false;
-            function markUnsavedChanges() {
-                hasUnsavedChanges = true;
-            }
+        const win = window.open('', '_blank');
+        if (!win) throw new Error('Failed to open new window');
+        win.document.write(`
+          <html>
+            <head>
+              <title>Ishida Issue Log</title>
+              <style>
+                body { font-family: Arial, sans-serif; padding: 20px; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+                th, td { padding: 10px; border: 1px solid #ccc; text-align: center; }
+                h2 { text-align: center; }
+                div { margin-bottom: 10px; }
+                .global-fields, .line-fields { margin-bottom: 10px; }
+              </style>
+            </head>
+            <body>
+              <div class="global-fields">
+                <div><strong>Customer:</strong> ${customer.replace(/</g, '<')}</div>
+                <div><strong>Address:</strong> ${address.replace(/</g, '<')}</div>
+                <div><strong>City/State:</strong> ${cityState.replace(/</g, '<')}</div>
+              </div>
+              ${clone.innerHTML}
+            </body>
+          </html>
+        `);
+        win.document.close();
+        win.focus();
+        win.print();
+        win.close();
+      } catch (error) {
+        console.error('Error in exportToPDF:', error);
+        alert(`Error exporting to PDF: ${error.message}`);
+      }
+    }
 
-            // Export JSON backup
-            function exportJSON() {
-                try {
-                    const formData = JSON.parse(localStorage.getItem('ccwDiagnosticForm') || '{}');
-                    const blob = new Blob([JSON.stringify(formData, null, 2)], { type: 'application/json' });
-                    const link = document.createElement('a');
-                    const url = URL.createObjectURL(blob);
-                    link.setAttribute('href', url);
-                    link.setAttribute('download', `ccw_diagnostic_form_${getTimestamp()}.json`);
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(url);
-                    hideError('json-error');
-                } catch (error) {
-                    console.error('Error exporting JSON:', error);
-                    showError('json-error', 'Failed to export JSON. Please try again.');
-                }
-            }
+    window.onload = function() {
+      try {
+        console.debug('Loading from localStorage on page load');
+        loadFromLocalStorage();
+      } catch (error) {
+        console.error('Error in window.onload:', error);
+        alert(`Error loading data: ${error.message}. Please import a JSON backup if available.`);
+      }
+    };
+  
+function exportDashboardToPDF() {
+  try {
+    const dashboard = document.getElementById('dashboard');
+    if (!dashboard || dashboard.style.display === 'none') {
+      alert('Please open the Dashboard before exporting.');
+      return;
+    }
 
-            // Import JSON backup
-            function importJSON(event) {
-                try {
-                    const file = event.target.files[0];
-                    if (!file) {
-                        showError('json-error', 'No file selected.');
-                        return;
-                    }
-                    if (!file.name.endsWith('.json')) {
-                        showError('json-error', 'Please select a valid JSON file.');
-                        return;
-                    }
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        try {
-                            const formData = JSON.parse(e.target.result);
-                            if (!formData['num-heads']) {
-                                throw new Error('Invalid JSON: Number of heads not specified.');
-                            }
-                            const numHeads = parseInt(formData['num-heads']);
-                            if (isNaN(numHeads) || numHeads < 1 || numHeads > 32) {
-                                throw new Error('Invalid number of heads in JSON.');
-                            }
-                            localStorage.setItem('ccwDiagnosticForm', JSON.stringify(formData));
-                            loadFormState();
-                            hideError('json-error');
-                            event.target.value = '';
-                            showNotification('JSON imported successfully');
-                        } catch (error) {
-                            console.error('Error importing JSON:', error);
-                            showError('json-error', `Failed to import JSON: ${error.message}`);
-                        }
-                    };
-                    reader.onerror = function() {
-                        showError('json-error', 'Error reading JSON file.');
-                    };
-                    reader.readAsText(file);
-                } catch (error) {
-                    console.error('Error importing JSON:', error);
-                    showError('json-error', 'Failed to import JSON. Please try again.');
-                }
-            }
+    const clone = dashboard.cloneNode(true);
+    const win = window.open('', '_blank');
+    if (!win) throw new Error('Failed to open new window');
 
-            // Clear saved data
-            function clearSavedData() {
-                if (confirm('Are you sure you want to clear all saved data? This cannot be undone.')) {
-                    try {
-                        localStorage.removeItem('ccwDiagnosticForm');
-                        document.getElementById('num-heads').value = 32;
-                        renderHeads(32);
-                        document.querySelectorAll('input:not([readonly]), select, textarea').forEach(input => {
-                            if (input.type === 'checkbox') {
-                                input.checked = false;
-                            } else if (input.tagName === 'SELECT') {
-                                input.value = input.options[0].value;
-                            } else if (input.id !== 'num-heads') {
-                                input.value = '';
-                            }
-                        });
-                        updateTotalDifferential();
-                        showNotification('Saved data cleared');
-                    } catch (error) {
-                        console.error('Error clearing data:', error);
-                        showError('json-error', 'Failed to clear saved data.');
-                    }
-                }
-            }
+    const html = '<html><head><title>Ishida Dashboard Report</title>' +
+      '<style>' +
+      'body { font-family: Arial, sans-serif; padding: 20px; }' +
+      'table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }' +
+      'th, td { padding: 10px; border: 1px solid #ccc; text-align: center; }' +
+      'h3, h4 { text-align: center; }' +
+      '</style></head><body>' +
+      '<h1>Ishida Dashboard Report</h1>' +
+      clone.innerHTML +
+      '</body></html>';
 
-            // Export form data to CSV
-            function exportToCSV() {
-                try {
-                    const formData = {};
-                    const numHeads = parseInt(document.getElementById('num-heads').value) || 32;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+    win.close();
+  } catch (error) {
+    console.error('Error in exportDashboardToPDF:', error);
+    alert('Error exporting dashboard: ' + error.message);
+  }
+}
 
-                    // General Information
-                    formData.customer = document.getElementById('customer')?.value || '';
-                    formData.street_address = document.getElementById('street_address')?.value || '';
-                    formData.city = document.getElementById('city')?.value || '';
-                    formData.state = document.getElementById('state')?.value || '';
-                    formData.line_number = document.getElementById('line_number')?.value || '';
-                    formData.date = document.getElementById('date')?.value || '';
-                    formData.running = document.getElementById('running')?.checked ? 'Yes' : 'No';
-                    formData.model = document.getElementById('model')?.value || '';
-                    formData.serial = document.getElementById('serial')?.value || '';
-                    formData.job = document.getElementById('job')?.value || '';
-
-                    // Heads Status
-                    formData.num_heads = numHeads;
-                    formData.heads_issue = document.getElementById('heads_issue')?.value || '';
-                    for (let i = 1; i <= numHeads; i++) {
-                        formData[`head${i}_status`] = document.getElementById(`head${i}`)?.checked ? 'Down' : 'Up';
-                        formData[`head${i}_issue`] = document.getElementById(`head${i}_issue`)?.value || 'None';
-                    }
-
-                    // Exterior Conditions
-                    const exteriorFields = [
-                        'rcu_condition', 'rf_pan_condition', 'df_pan_condition', 'af_pan_condition',
-                        'chutes_condition', 'infeed_chute_support', 'rf_bolts_missing',
-                        'rf_boots_condition', 'df_boots_condition', 'af_boots_condition'
-                    ];
-                    exteriorFields.forEach(field => {
-                        formData[field] = document.getElementById(field)?.value || '';
-                        formData[`${field}_notes`] = document.getElementById(`${field}_notes`)?.value || '';
-                    });
-
-                    // Interior Conditions
-                    const interiorFields = [
-                        'feeder_cover_condition', 'rf_feeder_condition', 'df_feeder_condition',
-                        'af_feeder_condition', 'wdu_condition', 'bdu_condition',
-                        'cabinet_doors_condition', 'drains_condition', 'air_dryer_condition'
-                    ];
-                    interiorFields.forEach(field => {
-                        formData[field] = document.getElementById(field)?.value || '';
-                        formData[`${field}_notes`] = document.getElementById(`${field}_notes`)?.value || '';
-                    });
-
-                    // Miscellaneous Items
-                    const miscFields = [
-                        'th_dth_rs_condition', 'df_test_drive', 'af_test_drive',
-                        'th_test_drive', 'dth_test_drive', 'rs_test_drive'
-                    ];
-                    miscFields.forEach(field => {
-                        formData[field] = document.getElementById(field)?.value || '';
-                        formData[`${field}_notes`] = document.getElementById(`${field}_notes`)?.value || '';
-                    });
-
-                    // Test Drive and Span Weight
-                    formData.span_weight = document.getElementById('span_weight')?.value || '';
-                    formData.total_differential = document.getElementById('total_differential')?.value || '';
-                    formData.notes = document.getElementById('notes')?.value || '';
-                    for (let i = 1; i <= numHeads; i++) {
-                        formData[`head${i}_current_weight`] = document.getElementById(`head${i}_current_weight`)?.value || '';
-                        formData[`head${i}_after_span`] = document.getElementById(`head${i}_after_span`)?.value || '';
-                        formData[`head${i}_differential`] = document.getElementById(`head${i}_differential`)?.value || '';
-                    }
-
-                    // Create CSV headers and data
-                    const headers = Object.keys(formData);
-                    const data = [headers, headers.map(key => formData[key])];
-
-                    // Convert to CSV using SheetJS
-                    const ws = XLSX.utils.aoa_to_sheet(data);
-                    const csv = XLSX.utils.sheet_to_csv(ws);
-
-                    // Download CSV
-                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                    const link = document.createElement('a');
-                    const url = URL.createObjectURL(blob);
-                    link.setAttribute('href', url);
-                    link.setAttribute('download', `ccw_diagnostic_form_${getTimestamp()}.csv`);
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(url);
-
-                    hideError('csv-error');
-                } catch (error) {
-                    console.error('Error exporting CSV:', error);
-                    showError('csv-error', 'Failed to export CSV. Please try again.');
-                }
-            }
-
-            // Import CSV file
-            function importFromCSV(event) {
-                try {
-                    const file = event.target.files[0];
-                    if (!file) {
-                        showError('csv-error', 'No file selected.');
-                        return;
-                    }
-                    if (!file.name.endsWith('.csv')) {
-                        showError('csv-error', 'Please select a valid CSV file.');
-                        return;
-                    }
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        try {
-                            const text = e.target.result;
-                            const lines = text.split('\n').filter(line => line.trim() !== '');
-                            if (lines.length < 2) {
-                                throw new Error('CSV file is empty or invalid.');
-                            }
-                            const headers = lines[0].split(',').map(h => h.trim());
-                            const values = lines[1].split(',').map(v => v.trim());
-                            if (headers.length !== values.length) {
-                                throw new Error('CSV headers and values do not match.');
-                            }
-                            const formData = {};
-                            headers.forEach((header, index) => {
-                                formData[header] = values[index] || '';
-                            });
-                            if (!formData['num_heads']) {
-                                throw new Error('Number of heads not specified in CSV.');
-                            }
-                            const numHeads = parseInt(formData['num_heads']);
-                            if (isNaN(numHeads) || numHeads < 1 || numHeads > 32) {
-                                throw new Error('Invalid number of heads in CSV.');
-                            }
-                            document.getElementById('num-heads').value = numHeads;
-                            renderHeads(numHeads);
-                            for (const [key, value] of Object.entries(formData)) {
-                                const input = document.getElementById(key);
-                                if (input) {
-                                    if (input.type === 'checkbox') {
-                                        input.checked = value === 'Down' || value === 'true' || value === 'Yes';
-                                    } else if (input.type === 'number') {
-                                        input.value = isNaN(parseFloat(value)) ? '' : parseFloat(value);
-                                    } else {
-                                        input.value = value;
-                                    }
-                                }
-                            }
-                            for (let i = 1; i <= numHeads; i++) {
-                                const currentWeightInput = document.getElementById(`head${i}_current_weight`);
-                                const afterSpanInput = document.getElementById(`head${i}_after_span`);
-                                const differentialInput = document.getElementById(`head${i}_differential`);
-                                if (currentWeightInput && afterSpanInput && differentialInput) {
-                                    const currentWeight = parseFloat(currentWeightInput.value) || 0;
-                                    const afterSpan = parseFloat(afterSpanInput.value) || 0;
-                                    const differential = afterSpan - currentWeight;
-                                    differentialInput.value = isNaN(differential) ? '' : differential.toFixed(2);
-                                }
-                            }
-                            updateTotalDifferential();
-                            saveFormState();
-                            hideError('csv-error');
-                            event.target.value = '';
-                            showNotification('CSV imported successfully');
-                        } catch (error) {
-                            console.error('Error processing CSV:', error);
-                            showError('csv-error', `Failed to import CSV: ${error.message}`);
-                        }
-                    };
-                    reader.onerror = function() {
-                        showError('csv-error', 'Error reading CSV file.');
-                    };
-                    reader.readAsText(file);
-                } catch (error) {
-                    console.error('Error importing CSV:', error);
-                    showError('csv-error', 'Failed to import CSV. Please try again.');
-                }
-            }
-
-            // PDF Generation
-            try {
-                document.getElementById('generate-pdf').addEventListener('click', () => {
-                    if (!window.jspdf || !window.jspdf.jsPDF) {
-                        showError('pdf-error', 'PDF library not loaded. Please try again.');
-                        return;
-                    }
-                    const { jsPDF } = window.jspdf;
-                    const doc = new jsPDF();
-                    let y = 10;
-                    function addSection(title, content) {
-                        doc.setFontSize(14);
-                        doc.text(title, 10, y);
-                        y += 10;
-                        doc.setFontSize(10);
-                        content.forEach(line => {
-                            if (y > 270) {
-                                doc.addPage();
-                                y = 10;
-                            }
-                            const splitText = doc.splitTextToSize(line, 180);
-                            doc.text(splitText, 10, y);
-                            y += splitText.length * 7;
-                        });
-                        y += 5;
-                    }
-                    addSection('General Information', [
-                        `Customer: ${document.getElementById('customer')?.value || 'N/A'}`,
-                        `Street Address: ${document.getElementById('street_address')?.value || 'N/A'}`,
-                        `City: ${document.getElementById('city')?.value || 'N/A'}`,
-                        `State: ${document.getElementById('state')?.value || 'N/A'}`,
-                        `Line Number: ${document.getElementById('line_number')?.value || 'N/A'}`,
-                        `Date: ${document.getElementById('date')?.value || 'N/A'}`,
-                        `Running: ${document.getElementById('running')?.checked ? 'Yes' : 'No'}`,
-                        `Model: ${document.getElementById('model')?.value || 'N/A'}`,
-                        `Serial #: ${document.getElementById('serial')?.value || 'N/A'}`,
-                        `Job #: ${document.getElementById('job')?.value || 'N/A'}`
-                    ]);
-                    const numHeads = parseInt(document.getElementById('num-heads')?.value || 32);
-                    const headsStatus = [];
-                    for (let i = 1; i <= numHeads; i++) {
-                        const status = document.getElementById(`head${i}`)?.checked ? 'Down' : 'Up';
-                        const issue = document.getElementById(`head${i}_issue`)?.value || 'None';
-                        headsStatus.push(`Head ${i}: ${status}, Issue: ${issue}`);
-                    }
-                    headsStatus.push(`Additional Notes: ${document.getElementById('heads_issue')?.value || 'N/A'}`);
-                    addSection('Heads Status', headsStatus);
-                    const exterior = [
-                        `RCU Condition: ${document.getElementById('rcu_condition')?.value || 'N/A'}, Notes: ${document.getElementById('rcu_condition_notes')?.value || 'N/A'}`,
-                        `RF Pan Condition: ${document.getElementById('rf_pan_condition')?.value || 'N/A'}, Notes: ${document.getElementById('rf_pan_condition_notes')?.value || 'N/A'}`,
-                        `DF Pan Condition: ${document.getElementById('df_pan_condition')?.value || 'N/A'}, Notes: ${document.getElementById('df_pan_condition_notes')?.value || 'N/A'}`,
-                        `AF Pan Condition: ${document.getElementById('af_pan_condition')?.value || 'N/A'}, Notes: ${document.getElementById('af_pan_condition_notes')?.value || 'N/A'}`,
-                        `Chutes Condition: ${document.getElementById('chutes_condition')?.value || 'N/A'}, Notes: ${document.getElementById('chutes_condition_notes')?.value || 'N/A'}`,
-                        `Infeed Chute Support Arms: ${document.getElementById('infeed_chute_support')?.value || 'N/A'}, Notes: ${document.getElementById('infeed_chute_support_notes')?.value || 'N/A'}`,
-                        `RF Bolts Missing: ${document.getElementById('rf_bolts_missing')?.value || 'N/A'}, Notes: ${document.getElementById('rf_bolts_missing_notes')?.value || 'N/A'}`,
-                        `RF Boots Condition: ${document.getElementById('rf_boots_condition')?.value || 'N/A'}, Notes: ${document.getElementById('rf_boots_condition_notes')?.value || 'N/A'}`,
-                        `DF Boots Condition: ${document.getElementById('df_boots_condition')?.value || 'N/A'}, Notes: ${document.getElementById('df_boots_condition_notes')?.value || 'N/A'}`,
-                        `AF Boots Condition: ${document.getElementById('af_boots_condition')?.value || 'N/A'}, Notes: ${document.getElementById('af_boots_condition_notes')?.value || 'N/A'}`
-                    ];
-                    addSection('Exterior Conditions', exterior);
-                    const interior = [
-                        `Feeder Cover Condition: ${document.getElementById('feeder_cover_condition')?.value || 'N/A'}, Notes: ${document.getElementById('feeder_cover_condition_notes')?.value || 'N/A'}`,
-                        `RF Feeder Condition: ${document.getElementById('rf_feeder_condition')?.value || 'N/A'}, Notes: ${document.getElementById('rf_feeder_condition_notes')?.value || 'N/A'}`,
-                        `DF Feeder Condition: ${document.getElementById('df_feeder_condition')?.value || 'N/A'}, Notes: ${document.getElementById('df_feeder_condition_notes')?.value || 'N/A'}`,
-                        `AF Feeder Condition: ${document.getElementById('af_feeder_condition')?.value || 'N/A'}, Notes: ${document.getElementById('af_feeder_condition_notes')?.value || 'N/A'}`,
-                        `WDU Condition: ${document.getElementById('wdu_condition')?.value || 'N/A'}, Notes: ${document.getElementById('wdu_condition_notes')?.value || 'N/A'}`,
-                        `BDU Condition: ${document.getElementById('bdu_condition')?.value || 'N/A'}, Notes: ${document.getElementById('bdu_condition_notes')?.value || 'N/A'}`,
-                        `Cabinet Doors Condition: ${document.getElementById('cabinet_doors_condition')?.value || 'N/A'}, Notes: ${document.getElementById('cabinet_doors_condition_notes')?.value || 'N/A'}`,
-                        `Drains Installed and Clear: ${document.getElementById('drains_condition')?.value || 'N/A'}, Notes: ${document.getElementById('drains_condition_notes')?.value || 'N/A'}`,
-                        `Air Dryer Functional: ${document.getElementById('air_dryer_condition')?.value || 'N/A'}, Notes: ${document.getElementById('air_dryer_condition_notes')?.value || 'N/A'}`
-                    ];
-                    addSection('Interior Conditions', interior);
-                    const misc = [
-                        `TH/DTH/RS Condition: ${document.getElementById('th_dth_rs_condition')?.value || 'N/A'}, Notes: ${document.getElementById('th_dth_rs_condition_notes')?.value || 'N/A'}`,
-                        `DF Test Drive: ${document.getElementById('df_test_drive')?.value || 'N/A'}, Notes: ${document.getElementById('df_test_drive_notes')?.value || 'N/A'}`,
-                        `AF Test Drive: ${document.getElementById('af_test_drive')?.value || 'N/A'}, Notes: ${document.getElementById('af_test_drive_notes')?.value || 'N/A'}`,
-                        `TH Test Drive: ${document.getElementById('th_test_drive')?.value || 'N/A'}, Notes: ${document.getElementById('th_test_drive_notes')?.value || 'N/A'}`,
-                        `DTH Test Drive: ${document.getElementById('dth_test_drive')?.value || 'N/A'}, Notes: ${document.getElementById('dth_test_drive_notes')?.value || 'N/A'}`,
-                        `RS Test Drive: ${document.getElementById('rs_test_drive')?.value || 'N/A'}, Notes: ${document.getElementById('rs_test_drive_notes')?.value || 'N/A'}`
-                    ];
-                    addSection('Miscellaneous Items', misc);
-                    const testDrive = [`Span Weight: ${document.getElementById('span_weight')?.value || 'N/A'}`];
-                    for (let i = 1; i <= numHeads; i++) {
-                        const currentWeight = document.getElementById(`head${i}_current_weight`)?.value || 'N/A';
-                        const afterSpan = document.getElementById(`head${i}_after_span`)?.value || 'N/A';
-                        const differential = document.getElementById(`head${i}_differential`)?.value || 'N/A';
-                        testDrive.push(`Head ${i}: Current Weight: ${currentWeight}, After Span Adjust: ${afterSpan}, Differential: ${differential}`);
-                    }
-                    testDrive.push(`Total Differential: ${document.getElementById('total_differential')?.value || 'N/A'}`);
-                    testDrive.push(`Notes: ${document.getElementById('notes')?.value || 'N/A'}`);
-                    addSection('Test Drive and Span Weight', testDrive);
-                    doc.save(`ccw_diagnostic_form_${getTimestamp()}.pdf`);
-                    hideError('pdf-error');
-                });
-            } catch (error) {
-                console.error('Error generating PDF:', error);
-                showError('pdf-error', 'Failed to generate PDF. Please try again.');
-            }
-
-            // Event listeners
-            try {
-                // CSV export and import
-                document.getElementById('export-csv').addEventListener('click', exportToCSV);
-                document.getElementById('import-csv').addEventListener('change', importFromCSV);
-
-                // JSON export and import
-                document.getElementById('export-json').addEventListener('click', exportJSON);
-                document.getElementById('import-json').addEventListener('change', importJSON);
-
-                // Clear data and reset form
-                document.getElementById('clear-data').addEventListener('click', clearSavedData);
-                document.getElementById('reset-form').addEventListener('click', resetForm);
-
-                // Mark unsaved changes on input
-                document.querySelectorAll('input:not([readonly]), select, textarea').forEach(input => {
-                    input.addEventListener('change', markUnsavedChanges);
-                    input.addEventListener('input', markUnsavedChanges);
-                });
-
-                // Prompt before leaving page
-                window.addEventListener('beforeunload', (event) => {
-                    if (hasUnsavedChanges) {
-                        event.preventDefault();
-                        event.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
-                    }
-                });
-            } catch (error) {
-                console.error('Error setting up event listeners:', error);
-                showError('json-error', 'Failed to initialize form functionality.');
-            }
-
-            // Initial render
-            try {
-                window.addEventListener('load', () => {
-                    loadFormState();
-                    // Attach debounced save to existing inputs
-                    document.querySelectorAll('input:not([readonly]), select, textarea').forEach(input => {
-                        input.addEventListener('change', debouncedSaveFormState);
-                    });
-                });
-            } catch (error) {
-                console.error('Error setting up load event:', error);
-                showError('heads-error', 'Failed to initialize form.');
-            }
-        </script>
-    </div>
+</script>
 </body>
 </html>
