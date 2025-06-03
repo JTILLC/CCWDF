@@ -1,83 +1,9 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        
-function exportDashboardToPDF() {
-  try {
-    const dashboard = document.getElementById('dashboard');
-    if (!dashboard || dashboard.style.display === 'none') {
-      alert('Please open the Dashboard before exporting.');
-      return;
-    }
-
-    const clone = dashboard.cloneNode(true);
-    const win = window.open('', '_blank');
-    if (!win) throw new Error('Failed to open new window');
-
-    const html = '<html><head><title>Ishida Dashboard Report</title>' +
-      '<style>' +
-      'body { font-family: Arial, sans-serif; padding: 20px; }' +
-      'table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }' +
-      'th, td { padding: 10px; border: 1px solid #ccc; text-align: center; }' +
-      'h3, h4 { text-align: center; }' +
-      '</style></head><body>' +
-      '<h1>Ishida Dashboard Report</h1>' +
-      clone.innerHTML +
-      '</body></html>';
-
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    win.print();
-    win.close();
-  } catch (error) {
-    console.error('Error in exportDashboardToPDF:', error);
-    alert('Error exporting dashboard: ' + error.message);
-  }
-}
-
-</script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ishida Weigher Issue Logger</title>
+  <title>Ishida Weigher (CCW) Issue Logger</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -94,7 +20,7 @@ function exportDashboardToPDF() {
       border: 1px solid #ccc;
       text-align: center;
     }
-    select, input[type="text"], input[type="number"] {
+    select, input[type="text"], input[type="number"], textarea {
       width: 90%;
     }
     h1, h3 {
@@ -175,7 +101,7 @@ function exportDashboardToPDF() {
         font-weight: bold;
         width: 50%;
       }
-      select, input[type="text"], input[type="number"] {
+      select, input[type="text"], input[type="number"], textarea {
         width: 100%;
       }
       .global-fields, .line-fields {
@@ -210,7 +136,7 @@ function exportDashboardToPDF() {
   <button onclick="exportToCSV()">Export Current Line to CSV</button>
   <button onclick="exportToJSON()">Export All to JSON</button>
   <button onclick="exportToPDF()">Export to PDF</button>
-<button onclick="exportDashboardToPDF()">Export Dashboard to PDF</button>
+  <button onclick="exportDashboardToPDF()">Export Dashboard to PDF</button>
   <input type="file" id="importFile" accept=".csv,.json" onchange="handleImport(event)">
   <button onclick="clearLocalStorage()" aria-label="Clear local storage">Clear Local Storage</button>
   <button onclick="showDashboard()" aria-label="Show dashboard">Show Dashboard</button>
@@ -218,6 +144,7 @@ function exportDashboardToPDF() {
   <div class="nav-buttons" id="machineNav"></div>
   <div id="machineContainer"></div>
   <div id="dashboard" class="dashboard"></div>
+
   <script>
     // Global error handler for uncaught exceptions
     window.onerror = function(message, source, lineno, colno, error) {
@@ -412,11 +339,14 @@ function exportDashboardToPDF() {
         } else {
           sections.forEach(section => {
             const title = section.querySelector('h2')?.textContent.trim() || 'Untitled';
+            const notesField = section.querySelector('textarea')?.value.trim() || '';
             const mainTable = section.querySelector('form table tbody');
             if (!mainTable) {
               console.warn('Main table not found for section:', section);
               return;
             }
+
+            // Check if this line has any offline heads
             let lineHtml = '';
             Array.from(mainTable.querySelectorAll('tr')).forEach(row => {
               const headNum = row.querySelector('td:first-child')?.textContent || '';
@@ -426,10 +356,12 @@ function exportDashboardToPDF() {
               const notesInput = row.querySelector('input[name^="custom_"]');
               const status = statusSelect?.value || 'active';
               if (status !== 'offline') return;
+
               const reason = errorSelect?.value || 'None';
               const fixed = fixedSelect?.value || 'na';
               const notes = notesInput?.value || '';
               const rowStyle = fixed === 'fixed' ? 'background-color: orange;' : 'background-color: lightcoral;';
+
               lineHtml += `
                 <tr style="${rowStyle}">
                   <td data-label="Head #">${headNum}</td>
@@ -440,11 +372,21 @@ function exportDashboardToPDF() {
                 </tr>`;
               hasOfflineHeads = true;
             });
-            if (lineHtml) {
+
+            if (notesField !== '' || lineHtml) {
               html += `<h4>${title}</h4>`;
-              html += '<table><thead><tr><th>Head #</th><th>Status</th><th>Reason</th><th>Fixed</th><th>Notes</th></tr></thead><tbody>';
-              html += lineHtml;
-              html += '</tbody></table>';
+
+              // Show line-level Notes (if any)
+              if (notesField !== '') {
+                html += `<p><strong>Line Notes:</strong> ${notesField.replace(/</g, '<')}</p>`;
+              }
+
+              // If there are offline heads, show their table
+              if (lineHtml) {
+                html += '<table><thead><tr><th>Head #</th><th>Status</th><th>Reason</th><th>Fixed</th><th>Notes</th></tr></thead><tbody>';
+                html += lineHtml;
+                html += '</tbody></table>';
+              }
             }
           });
         }
@@ -470,10 +412,6 @@ function exportDashboardToPDF() {
       } catch (error) {
         console.error('Error in updateLineName:', error);
       }
-    }
-
-    function toggleCustomError(selectEl) {
-      // No-op, kept for future extensibility
     }
 
     function updateRowColors() {
@@ -1082,41 +1020,40 @@ function exportDashboardToPDF() {
         alert(`Error loading data: ${error.message}. Please import a JSON backup if available.`);
       }
     };
-  
-function exportDashboardToPDF() {
-  try {
-    const dashboard = document.getElementById('dashboard');
-    if (!dashboard || dashboard.style.display === 'none') {
-      alert('Please open the Dashboard before exporting.');
-      return;
+
+    function exportDashboardToPDF() {
+      try {
+        const dashboard = document.getElementById('dashboard');
+        if (!dashboard || dashboard.style.display === 'none') {
+          alert('Please open the Dashboard before exporting.');
+          return;
+        }
+
+        const clone = dashboard.cloneNode(true);
+        const win = window.open('', '_blank');
+        if (!win) throw new Error('Failed to open new window');
+
+        const html = '<html><head><title>Ishida Dashboard Report</title>' +
+          '<style>' +
+          'body { font-family: Arial, sans-serif; padding: 20px; }' +
+          'table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }' +
+          'th, td { padding: 10px; border: 1px solid #ccc; text-align: center; }' +
+          'h3, h4 { text-align: center; }' +
+          '</style></head><body>' +
+          '<h1>Ishida Dashboard Report</h1>' +
+          clone.innerHTML +
+          '</body></html>';
+
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        win.print();
+        win.close();
+      } catch (error) {
+        console.error('Error in exportDashboardToPDF:', error);
+        alert('Error exporting dashboard: ' + error.message);
+      }
     }
-
-    const clone = dashboard.cloneNode(true);
-    const win = window.open('', '_blank');
-    if (!win) throw new Error('Failed to open new window');
-
-    const html = '<html><head><title>Ishida Dashboard Report</title>' +
-      '<style>' +
-      'body { font-family: Arial, sans-serif; padding: 20px; }' +
-      'table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }' +
-      'th, td { padding: 10px; border: 1px solid #ccc; text-align: center; }' +
-      'h3, h4 { text-align: center; }' +
-      '</style></head><body>' +
-      '<h1>Ishida Dashboard Report</h1>' +
-      clone.innerHTML +
-      '</body></html>';
-
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    win.print();
-    win.close();
-  } catch (error) {
-    console.error('Error in exportDashboardToPDF:', error);
-    alert('Error exporting dashboard: ' + error.message);
-  }
-}
-
-</script>
+  </script>
 </body>
 </html>
