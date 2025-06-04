@@ -936,6 +936,9 @@
       }
     }
 
+    // -----------------------------------------------------------------------
+    // REWRITTEN exportToPDF(): explicitly build an HTML table with current values
+    // -----------------------------------------------------------------------
     function exportToPDF() {
       try {
         const visible = document.querySelector('.machine-section:not([style*="display: none"])');
@@ -943,64 +946,98 @@
           alert('No line is currently visible to export.');
           return;
         }
-        const customer = document.getElementById('customer')?.value || '';
-        const address = document.getElementById('address')?.value || '';
-        const cityState = document.getElementById('cityState')?.value || '';
-        const clone = visible.cloneNode(true);
 
-        clone.querySelectorAll('select').forEach(select => {
-          const span = document.createElement('span');
-          span.textContent = select.options[select.selectedIndex]?.textContent || '';
-          select.replaceWith(span);
-        });
-        clone.querySelectorAll('input[type="text"], input[type="number"]').forEach(input => {
-          const span = document.createElement('span');
-          span.textContent = input.value || '';
-          input.replaceWith(span);
-        });
-        clone.querySelectorAll('textarea').forEach(textarea => {
-          const div = document.createElement('div');
-          div.textContent = textarea.value || '';
-          textarea.replaceWith(div);
-        });
-        clone.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-          const span = document.createElement('span');
-          span.textContent = checkbox.checked ? 'Yes' : 'No';
-          checkbox.replaceWith(span);
+        // 1) Gather header‐level fields
+        const customer = document.getElementById('customer')?.value.trim() || '';
+        const address = document.getElementById('address')?.value.trim() || '';
+        const cityState = document.getElementById('cityState')?.value.trim() || '';
+
+        // 2) Gather line‐specific fields
+        const title = visible.querySelector('h2')?.textContent.trim() || 'Untitled';
+        const model = visible.querySelector(`#model_${visible.id}`)?.value.trim() || '';
+        const jobNumber = visible.querySelector(`#jobNumber_${visible.id}`)?.value.trim() || '';
+        const serialNumber = visible.querySelector(`#serialNumber_${visible.id}`)?.value.trim() || '';
+        const running = visible.querySelector('input[name^="running_"]')?.checked ? 'Yes' : 'No';
+        const lineNotes = visible.querySelector('textarea')?.value.trim() || '';
+
+        // 3) Build an HTML string for the PDF
+        let html = `
+          <html>
+          <head>
+            <title>Ishida Issue Log - ${title}</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; }
+              h2 { text-align: center; margin-top: 0; }
+              .section { margin-bottom: 20px; }
+              .section div { margin-bottom: 5px; }
+              table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+              th, td { padding: 8px; border: 1px solid #ccc; text-align: center; }
+              th { background-color: #f4f4f4; }
+            </style>
+          </head>
+          <body>
+            <h2>${title}</h2>
+            <div class="section">
+              <div><strong>Customer:</strong> ${customer.replace(/</g, '<')}</div>
+              <div><strong>Address:</strong> ${address.replace(/</g, '<')}</div>
+              <div><strong>City/State:</strong> ${cityState.replace(/</g, '<')}</div>
+            </div>
+            <div class="section">
+              <div><strong>Model:</strong> ${model.replace(/</g, '<')}</div>
+              <div><strong>Job Number:</strong> ${jobNumber.replace(/</g, '<')}</div>
+              <div><strong>Serial Number:</strong> ${serialNumber.replace(/</g, '<')}</div>
+              <div><strong>Line Running:</strong> ${running}</div>
+              <div><strong>Line Notes:</strong> ${lineNotes.replace(/</g, '<')}</div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Head #</th>
+                  <th>Status</th>
+                  <th>Error</th>
+                  <th>Notes</th>
+                  <th>Fixed</th>
+                </tr>
+              </thead>
+              <tbody>
+        `;
+
+        // 4) Iterate each row in the visible table
+        const rows = visible.querySelectorAll('form table tbody tr');
+        rows.forEach(row => {
+          const headNum = row.querySelector('td:first-child')?.textContent || '';
+          const statusSelect = row.querySelector('select[name^="status_"]');
+          const errorSelect = row.querySelector('select[name^="error_"]');
+          const notesInput = row.querySelector('input[name^="custom_"]');
+          const fixedSelect = row.querySelector('select[name^="fixed_"]');
+
+          const statusText = statusSelect?.selectedOptions[0]?.textContent || '';
+          const errorText = errorSelect?.selectedOptions[0]?.textContent || '';
+          const notesText = notesInput?.value.trim() || '';
+          const fixedText = fixedSelect?.selectedOptions[0]?.textContent || '';
+
+          html += `
+            <tr>
+              <td>${headNum.replace(/</g, '<')}</td>
+              <td>${statusText.replace(/</g, '<')}</td>
+              <td>${errorText.replace(/</g, '<')}</td>
+              <td>${notesText.replace(/</g, '<')}</td>
+              <td>${fixedText.replace(/</g, '<')}</td>
+            </tr>
+          `;
         });
 
-        const spanAdjust = clone.querySelector('[id^="spanAdjustTable_"]');
-        if (spanAdjust && spanAdjust.style.display !== 'none') {
-          spanAdjust.querySelectorAll('span[id^="diff_"]').forEach(diff => {
-            diff.textContent = diff.textContent || '0.00';
-          });
-        }
+        html += `
+              </tbody>
+            </table>
+          </body>
+          </html>
+        `;
 
+        // 5) Open a new window, write the HTML, then trigger print()
         const win = window.open('', '_blank');
         if (!win) throw new Error('Failed to open new window');
-        win.document.write(`
-          <html>
-            <head>
-              <title>Ishida Issue Log</title>
-              <style>
-                body { font-family: Arial, sans-serif; padding: 20px; }
-                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-                th, td { padding: 10px; border: 1px solid #ccc; text-align: center; }
-                h2 { text-align: center; }
-                div { margin-bottom: 10px; }
-                .global-fields, .line-fields { margin-bottom: 10px; }
-              </style>
-            </head>
-            <body>
-              <div class="global-fields">
-                <div><strong>Customer:</strong> ${customer.replace(/</g, '<')}</div>
-                <div><strong>Address:</strong> ${address.replace(/</g, '<')}</div>
-                <div><strong>City/State:</strong> ${cityState.replace(/</g, '<')}</div>
-              </div>
-              ${clone.innerHTML}
-            </body>
-          </html>
-        `);
+        win.document.write(html);
         win.document.close();
         win.focus();
         win.print();
