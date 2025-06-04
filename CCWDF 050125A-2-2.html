@@ -111,7 +111,7 @@
   </style>
 </head>
 <body>
- <img id="logo" src="https://i.imgur.com/GQRZTtW.png" alt="Logo" width="100">        
+  <img id="logo" src="https://i.imgur.com/GQRZTtW.png" alt="Logo" width="100" />
   <h1>Ishida Weigher (CCW) Issue Logger</h1>
   <div class="global-fields">
     <label for="customer">Customer:</label>
@@ -285,7 +285,6 @@
             <div class="notes-container">
               <label for="notes_${machineId}"><strong>Notes:</strong></label>
               <textarea id="notes_${machineId}" name="notes_${machineId}" rows="4" style="width: 100%;" oninput="debounceSave()"></textarea>
-              <button type="button" onclick="addTimestamp('${machineId}')" aria-label="Add timestamp to notes">Add Timestamp</button>
             </div>
           </form>`;
 
@@ -482,29 +481,6 @@
         diffSpan.textContent = diff.toFixed(2);
       } catch (error) {
         console.error('Error in updateDifference:', error);
-      }
-    }
-
-    function addTimestamp(machineId) {
-      try {
-        console.debug(`Adding timestamp for machineId: ${machineId}`);
-        const textarea = document.getElementById(`notes_${machineId}`);
-        if (!textarea) throw new Error(`Notes textarea not found for ${machineId}`);
-        const now = new Date().toLocaleString('en-US', { timeZone: 'America/Denver' });
-        const timestamp = `[${now}] `;
-        const currentValue = textarea.value || '';
-        const cursorPos = textarea.selectionStart ?? currentValue.length;
-        console.debug(`Cursor position: ${cursorPos}, Current value length: ${currentValue.length}`);
-        const textBefore = currentValue.substring(0, cursorPos);
-        const textAfter = currentValue.substring(cursorPos);
-        textarea.value = textBefore + timestamp + textAfter;
-        const newCursorPos = cursorPos + timestamp.length;
-        textarea.selectionStart = textarea.selectionEnd = newCursorPos;
-        textarea.focus();
-        debounceSave();
-      } catch (error) {
-        console.error('Error in addTimestamp:', error);
-        alert(`Error adding timestamp: ${error.message}`);
       }
     }
 
@@ -937,7 +913,7 @@
     }
 
     // -----------------------------------------------------------------------
-    // REWRITTEN exportToPDF(): explicitly build an HTML table with current values
+    // REWRITTEN exportToPDF(): include logo and remove any URL text
     // -----------------------------------------------------------------------
     function exportToPDF() {
       try {
@@ -967,6 +943,7 @@
             <title>Ishida Issue Log - ${title}</title>
             <style>
               body { font-family: Arial, sans-serif; padding: 20px; }
+              #logo { width: 100px; }
               h2 { text-align: center; margin-top: 0; }
               .section { margin-bottom: 20px; }
               .section div { margin-bottom: 5px; }
@@ -976,6 +953,7 @@
             </style>
           </head>
           <body>
+            <img id="logo" src="https://i.imgur.com/GQRZTtW.png" alt="Logo" />
             <h2>${title}</h2>
             <div class="section">
               <div><strong>Customer:</strong> ${customer.replace(/</g, '<')}</div>
@@ -1066,20 +1044,29 @@
           return;
         }
 
-        const clone = dashboard.cloneNode(true);
+        const cloned = dashboard.cloneNode(true);
         const win = window.open('', '_blank');
         if (!win) throw new Error('Failed to open new window');
 
-        const html = '<html><head><title>Ishida Dashboard Report</title>' +
-          '<style>' +
-          'body { font-family: Arial, sans-serif; padding: 20px; }' +
-          'table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }' +
-          'th, td { padding: 10px; border: 1px solid #ccc; text-align: center; }' +
-          'h3, h4 { text-align: center; }' +
-          '</style></head><body>' +
-          '<h1>Ishida Dashboard Report</h1>' +
-          clone.innerHTML +
-          '</body></html>';
+        const html = `
+          <html>
+          <head>
+            <title>Ishida Dashboard Report</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; }
+              #logo { width: 100px; display: block; margin: 0 auto 10px; }
+              h3, h4 { text-align: center; }
+              table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+              th, td { padding: 10px; border: 1px solid #ccc; text-align: center; }
+            </style>
+          </head>
+          <body>
+            <img id="logo" src="https://i.imgur.com/GQRZTtW.png" alt="Logo" />
+            <h1>Ishida Dashboard Report</h1>
+            ${cloned.innerHTML}
+          </body>
+          </html>
+        `;
 
         win.document.write(html);
         win.document.close();
